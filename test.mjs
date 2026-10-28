@@ -127,6 +127,13 @@ let annoyed = ''
 for (let i = 0; i < 7; i += 1) annoyed = closingFor('mood-annoyed', at(12) + i * 60 * 60 * 1000).mood
 assert.equal(annoyed, 'annoyed')
 
+// 8.5) 别太单一：同一心情连说 6 轮，句子/颜文字都要变，且不跟上一轮重样
+const said = []
+for (let i = 0; i < 6; i += 1) said.push(closingFor('mood-vary', at(14) + i * 5 * 60 * 1000).text)
+assert.ok(new Set(said).size >= 4, `换着说才对，实际只有 ${new Set(said).size} 种：${said.join(' | ')}`)
+for (let i = 1; i < said.length; i += 1) assert.notEqual(said[i], said[i - 1], '连着两轮说了同一句')
+assert.ok(said.every((t) => /[（(].*[）)]/.test(t)), '每条都要带颜文字')
+
 // 9) client 半：能在假 window 里注册 settings.section，且组件是函数
 const { readFileSync: readClient } = await import('node:fs')
 const vm = await import('node:vm')
@@ -179,4 +186,4 @@ const tail = slots.filter((m) => m.name === 'conversation.chat.turnTail')[0]
 assert.equal(tail.order, 11, '收尾语要排在费用行（order 10）之后')
 
 rmSync(home, { recursive: true, force: true })
-console.log('ok: 12 组断言通过（全局注入 / 注释剥离 / 模板降级 / 忽略项目人格 / 接口注册 / 保存与备份 / 2 MB 上限 / 记忆按时间淘汰 / state 接口 / 心情判定 / 设置页与收尾语插槽）')
+console.log('ok: 13 组断言通过（全局注入 / 注释剥离 / 模板降级 / 忽略项目人格 / 接口注册 / 保存与备份 / 2 MB 上限 / 记忆按时间淘汰 / state 接口 / 心情判定 / 收尾语不重样 / 设置页与收尾语插槽）')

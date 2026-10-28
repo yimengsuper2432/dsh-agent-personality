@@ -34,6 +34,8 @@
 正文不再写收尾语：注入里明确要求「正文写完就停」，改由 client 半注册 `conversation.chat.turnTail`
 （order 11，排在 dsh-cost-meter 之后）渲染一句。
 
+收尾语的句子和颜文字都从一个更大的池子里挑，句式和表情用两套步长选，撞上上一轮就往后挪一格——不会四轮一个循环。
+
 **心情由宿主算，不顺着用户**（`lib/index.js` 的 `closingFor`）：
 
 | 心情 | 触发 |
