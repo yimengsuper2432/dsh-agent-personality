@@ -162,6 +162,10 @@ const clientExports = loaded.factory((name) => {
   return fakeReact
 })
 assert.deepEqual(clientExports.inject, ['slots'])
+// 收尾语是她自己在正文末尾写的：认〔尾〕标记，取后面那句
+assert.equal(clientExports.parseTail('正文\n〔尾〕困死了 (´-ω-`)'), '困死了 (´-ω-`)')
+assert.equal(clientExports.parseTail('没有标记的正文'), null)
+assert.equal(clientExports.parseTail('〔尾〕   '), null)
 const slots = []
 const injected = []
 clientExports.apply({
