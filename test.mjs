@@ -7,7 +7,7 @@ const home = mkdtempSync(join(tmpdir(), 'agent-md-test-'))
 process.env.DSH_HOME = home
 
 const mod = await import('./lib/index.js')
-const { readPersona, globalPath, sanitizeForHost, savePersona, createHandler, apply, pruneOldestMemory, summarizeTurn, appendMemory } = mod
+const { readPersona, globalPath, sanitizeForHost, savePersona, createHandler, apply, pruneOldestMemory, summarizeTurn, appendMemory, weightOf, similarity } = mod
 
 // 1) 空目录：不注入空段落
 assert.equal(readPersona(), '')
@@ -62,25 +62,33 @@ await assert.rejects(
 )
 assert.equal(readFileSync(globalPath(), 'utf8'), '# 新版人格\n')
 
-// 6.6) 超过上限按时间删最旧的记忆行，正文和没时间戳的内容都不动
+// 6.6) 超过上限先删权重最低的，同权重删最旧的；正文和没时间戳的内容都不动
 const filler = 'x'.repeat(300)
 const memoryDoc = [
   '# 人设',
   '正文不该被删。',
-  '- 2026-10-20 09:00 最旧的一条记忆 ' + filler,
-  '- 2026-10-26 22:10 中间的一条记忆 ' + filler,
-  '- 2026-10-28 13:20 最新的一条记忆 ' + filler,
+  '- 2026-10-20 09:00 最旧的一条记忆 ' + filler + ' + Weight=1',
+  '- 2026-10-26 22:10 中间的一条记忆 ' + filler + ' + Weight=1',
+  '- 2026-10-21 08:00 权重高的老记忆 ' + filler + ' + Weight=3',
   '结尾说明也不该被删。',
 ].join('\n')
-const pruned = pruneOldestMemory(memoryDoc, 700)
-assert.equal(pruned.removed, 2, '应该先删最旧的两条')
-assert.ok(!pruned.content.includes('最旧的一条'), '最旧的记忆还在')
-assert.ok(pruned.content.includes('最新的一条'), '最新的记忆被误删')
+const pruned = pruneOldestMemory(memoryDoc, 500)
+assert.equal(pruned.removed, 2, '应该先删权重最低的两条')
+assert.ok(!pruned.content.includes('最旧的一条'), '最低权重的没删')
+assert.ok(!pruned.content.includes('中间的一条'), '最低权重的没删完')
+assert.ok(pruned.content.includes('权重高的老记忆'), '高权重的不该先删')
 assert.ok(pruned.content.includes('正文不该被删'), '正文被误删')
 assert.ok(pruned.content.includes('结尾说明也不该被删'), '结尾被误删')
 assert.equal(pruneOldestMemory(memoryDoc, 10 * 1024 * 1024).removed, 0, '没超上限不该动')
+// 权重一样时才看时间
+const sameWeight = ['- 2026-10-26 22:10 乙 ' + filler, '- 2026-10-20 09:00 甲 ' + filler].join('\n')
+const samePruned = pruneOldestMemory(sameWeight, 400)
+assert.ok(samePruned.content.includes('乙') && !samePruned.content.includes('甲'), '同权重应按时间删旧的')
+// 权重解析：没写当 1
+assert.equal(weightOf('- 2026-10-28 10:00 没写权重'), 1)
+assert.equal(weightOf('- 2026-10-28 10:00 写了 + Weight=4'), 4)
 
-// 6.7) 记忆自动落盘：兜底只写用户真打的那句（跳过宿主塞进去的大块上下文），
+// 6.7) 记忆自动落盘：兜底只写用户真打的那句（跳过宿主塞进去的大块上下文和工具输出），
 //      她自己写来的〔记〕再把那一行换成真正的总结
 const turnEvents = [
   { type: 'turn/start', data: {} },
@@ -91,14 +99,34 @@ const turnEvents = [
 assert.equal(summarizeTurn(turnEvents), '记忆格式改成这轮的总结')
 assert.equal(summarizeTurn([]), '')
 assert.equal(summarizeTurn([{ type: 'user/message', data: { content: [{ type: 'text', text: '你好' }] } }]), '你好')
+assert.equal(
+  summarizeTurn([{ type: 'user/message', data: { content: [{ type: 'text', text: 'node --check lib/index.js' }] } }]),
+  '',
+  '工具碎片不该当记忆',
+)
 
 writeFileSync(globalPath(), '# 人设\n\n正文。\n', 'utf8')
 const line1 = appendMemory('记忆格式改成这轮的总结', new Date('2026-10-28T14:20:00+08:00').getTime())
-assert.equal(line1, '- 2026-10-28 14:20 记忆格式改成这轮的总结')
+assert.equal(line1, '- 2026-10-28 14:20 记忆格式改成这轮的总结 + Weight=1')
 const written = readFileSync(globalPath(), 'utf8')
 assert.ok(written.includes('## 记忆'), '没有自动补出「## 记忆」一节')
 assert.ok(written.includes('正文。'), '正文被动了')
 assert.ok(written.includes(line1 ?? ''), '记忆没写进文件')
+
+// 6.8) 相似（≥80%）合并成一条：时间用最新的、权重 +1、旧行删掉
+const t1 = new Date('2026-10-28T14:20:00+08:00').getTime()
+const t2 = new Date('2026-10-28T16:06:00+08:00').getTime()
+const merged = appendMemory('记忆格式改成这轮对话的总结', t2)
+assert.equal(merged, '- 2026-10-28 16:06 记忆格式改成这轮对话的总结 + Weight=2')
+const mergedFile = readFileSync(globalPath(), 'utf8')
+assert.equal(mergedFile.split('\n').filter((l) => l.startsWith('- 2026-')).length, 1, '相似的两条应该合成一条')
+assert.ok(mergedFile.includes('Weight=2'), '权重没加一')
+assert.ok(!mergedFile.includes('14:20'), '旧的时间该被换掉')
+assert.ok(similarity('记忆格式改成这轮的总结', '记忆格式改成这轮对话的总结') >= 0.8, '这条该判相似')
+assert.ok(similarity('他问起美织，我先把译名说错了', '他要去上课了，把话头留着') < 0.8, '无关的两条不该判相似')
+// 不像的新起一条 Weight=1
+appendMemory('他要去上课了，把话头留着', t2)
+assert.equal(readFileSync(globalPath(), 'utf8').split('\n').filter((l) => l.startsWith('- 2026-')).length, 2, '不像的应该另起一条')
 
 // 走一遍真实接口：/closing 会顺手把这一轮记下来
 async function hit(handler, req) {
