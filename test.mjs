@@ -347,50 +347,54 @@ assert.equal(typeof settings.label, 'function')
 const tail = slots.filter((m) => m.name === 'conversation.chat.turnTail')[0]
 assert.equal(tail.order, 11, '收尾语要排在费用行（order 10）之后')
 
-// 档案：说到某个角色的新信息，挂到那个人的条目下面，只添不改
+// 档案：说到某个角色的新信息，并进那个人的那段总结
 writeFileSync(
   globalPath(),
-  ['# 人设', '', '- **桃井爱莉**：原偶像。嘴上凶。', '- **桐谷遥**：冷静自持。', '', '## 记忆', ''].join('\n'),
+  ['# 人设', '', '- 桃井爱莉：', '    原偶像。嘴上凶。', '- 桐谷遥：', '    冷静自持。', '', '## 记忆', ''].join('\n'),
 )
 const readRaw = () => readFileSync(globalPath(), 'utf8')
 
-// 喜欢归一行、讨厌归另一行
 assert.equal(appendProfile('桃井爱莉：喜欢草莓蛋糕'), '桃井爱莉：喜欢草莓蛋糕')
-assert.equal(appendProfile('桃井爱莉：喜欢布丁'), '桃井爱莉：喜欢布丁')
-assert.equal(appendProfile('桃井爱莉：讨厌被人说可爱'), '桃井爱莉：讨厌被人说可爱')
 let raw = readRaw()
-assert.ok(raw.includes('  - 喜欢草莓蛋糕、布丁'), '喜欢的没并到同一行')
-assert.ok(raw.includes('  - 讨厌被人说可爱'), '讨厌的没单独一行')
+assert.ok(raw.includes('    原偶像。嘴上凶。喜欢草莓蛋糕。(对桃井爱莉的总结)'), '没并进那段总结')
+
+// 同类再添一项，还是那一句
+assert.equal(appendProfile('桃井爱莉：喜欢布丁'), '桃井爱莉：喜欢布丁')
+raw = readRaw()
+assert.ok(raw.includes('喜欢草莓蛋糕、布丁'), '喜欢的没并到同一句')
 assert.equal(raw.split('\n').filter((line) => line.includes('喜欢')).length, 1, '喜欢占了不止一行')
 
-// 不同侧面各记各的：喜欢草莓蛋糕 ≠ 喜欢草莓，谁也不抵掉谁
-assert.equal(appendProfile('桃井爱莉：不喜欢草莓'), '桃井爱莉：不喜欢草莓')
+// 别的侧面各自一句，谁也不抵销谁
+assert.equal(appendProfile('桃井爱莉：讨厌被人说可爱'), '桃井爱莉：讨厌被人说可爱')
 assert.equal(appendProfile('桃井爱莉：对猫过敏'), '桃井爱莉：对猫过敏')
 raw = readRaw()
-assert.ok(raw.includes('  - 喜欢草莓蛋糕、布丁'), '喜欢那行不该被动')
-assert.ok(raw.includes('  - 讨厌被人说可爱、草莓'), '不喜欢的没进讨厌行')
-assert.ok(raw.includes('  - 对猫过敏'), '过敏该单独一行')
-
-// 喜欢猫 + 对猫过敏：两个侧面并存
-assert.equal(appendProfile('桃井爱莉：喜欢猫'), '桃井爱莉：喜欢猫')
-raw = readRaw()
-assert.ok(raw.includes('  - 喜欢草莓蛋糕、布丁、猫'), '喜欢猫没并进同一行')
-assert.ok(raw.includes('  - 对猫过敏'), '过敏不该因为喜欢猫被抹掉')
+assert.ok(raw.includes('讨厌被人说可爱。'), '讨厌的没单独一句')
+assert.ok(raw.includes('对猫过敏。'), '过敏该单独一句')
+assert.ok(raw.includes('喜欢草莓蛋糕、布丁'), '喜欢那句被动了')
 
 // 重复的不加第二次
 assert.equal(appendProfile('桃井爱莉：喜欢布丁'), null, '同一项不该加两次')
 
-// 普通信息仍然一件一行
-assert.equal(appendProfile('桃井爱莉：弟弟叫彰人'), '桃井爱莉：弟弟叫彰人')
+// 老格式也认，提到时顺手升级成新格式
+writeFileSync(
+  globalPath(),
+  ['# 人设', '', '- **桐谷遥**：原人气偶像。表情不太外露。', '', '## 记忆', ''].join('\n'),
+)
+assert.equal(appendProfile('桐谷遥：喜欢安静的地方'), '桐谷遥：喜欢安静的地方')
 raw = readRaw()
-assert.ok(raw.includes('  - 弟弟叫彰人'), '普通信息没挂上')
-assert.ok(raw.indexOf('弟弟叫彰人') < raw.indexOf('**桐谷遥**'), '插到别人头上去了')
+assert.ok(raw.includes('- 桐谷遥：'), '老格式没升级')
+assert.ok(!raw.includes('**桐谷遥**'), '老格式的星号还在')
+assert.ok(
+  raw.includes('    原人气偶像。表情不太外露。喜欢安静的地方。(对桐谷遥的总结)'),
+  '升级后内容不对',
+)
 
-// 档案里还没有的人：单开一段，不往别人条目里塞
+// 档案里还没有的人：单开一段
 assert.equal(appendProfile('朝比奈真冬：喜欢安静'), '朝比奈真冬：喜欢安静')
 raw = readRaw()
 assert.ok(raw.includes('## 补记的人'), '缺补记段落')
-assert.ok(raw.includes('- **朝比奈真冬**：喜欢安静'), '补记条目不对')
+assert.ok(raw.includes('- 朝比奈真冬：'), '补记名字行不对')
+assert.ok(raw.includes('    喜欢安静。(对朝比奈真冬的总结)'), '补记内容不对')
 assert.equal(appendProfile('格式不对'), null, '没有冒号的不该收')
 
 
