@@ -363,12 +363,19 @@ assert.ok(raw.includes('  - 喜欢草莓蛋糕、布丁'), '喜欢的没并到�
 assert.ok(raw.includes('  - 讨厌被人说可爱'), '讨厌的没单独一行')
 assert.equal(raw.split('\n').filter((line) => line.includes('喜欢')).length, 1, '喜欢占了不止一行')
 
-// 撞到对面：以这次对话为准，旧的从喜欢行里摘掉
-assert.equal(appendProfile('桃井爱莉：不喜欢草莓蛋糕'), '桃井爱莉：不喜欢草莓蛋糕')
+// 不同侧面各记各的：喜欢草莓蛋糕 ≠ 喜欢草莓，谁也不抵掉谁
+assert.equal(appendProfile('桃井爱莉：不喜欢草莓'), '桃井爱莉：不喜欢草莓')
+assert.equal(appendProfile('桃井爱莉：对猫过敏'), '桃井爱莉：对猫过敏')
 raw = readRaw()
-assert.ok(!raw.includes('喜欢草莓蛋糕'), '冲突的旧说法没摘掉')
-assert.ok(raw.includes('  - 喜欢布丁'), '没冲突的那项不该动')
-assert.ok(raw.includes('  - 讨厌被人说可爱、草莓蛋糕'), '冲突项没进讨厌行')
+assert.ok(raw.includes('  - 喜欢草莓蛋糕、布丁'), '喜欢那行不该被动')
+assert.ok(raw.includes('  - 讨厌被人说可爱、草莓'), '不喜欢的没进讨厌行')
+assert.ok(raw.includes('  - 对猫过敏'), '过敏该单独一行')
+
+// 喜欢猫 + 对猫过敏：两个侧面并存
+assert.equal(appendProfile('桃井爱莉：喜欢猫'), '桃井爱莉：喜欢猫')
+raw = readRaw()
+assert.ok(raw.includes('  - 喜欢草莓蛋糕、布丁、猫'), '喜欢猫没并进同一行')
+assert.ok(raw.includes('  - 对猫过敏'), '过敏不该因为喜欢猫被抹掉')
 
 // 重复的不加第二次
 assert.equal(appendProfile('桃井爱莉：喜欢布丁'), null, '同一项不该加两次')
