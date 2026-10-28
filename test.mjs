@@ -106,6 +106,31 @@ assert.equal(
   '工具碎片不该当记忆',
 )
 
+// client 端的标记识别规则：标记只在行首算数（与 client.js 的 findLineMark 一致）。
+// 正文里讲到这个符号是讲规矩，不能把后面整段话收成日记——英文分析混进 AGENT.md 就是这么来的。
+function markValueOf(text, mark) {
+  const esc = mark.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const re = new RegExp('(^|\\n)([ \\t\\u3000]*)' + esc, 'g')
+  let m
+  let hit = null
+  while ((m = re.exec(text)) !== null) hit = m
+  if (hit === null) return null
+  const rest = text.slice(hit.index + hit[0].length)
+  const nl = rest.search(/[\r\n]/)
+  const value = (nl >= 0 ? rest.slice(0, nl) : rest).trim()
+  return value === '' ? null : value
+}
+const NOTE = '〔记〕'
+assert.equal(markValueOf('聊完了，她在正文末尾写〔记〕加一句总结', NOTE), null, '行内提到的标记不算')
+assert.equal(markValueOf('聊完了。\n〔记〕他今天来得很晚', NOTE), '他今天来得很晚')
+assert.equal(markValueOf('  〔记〕他今天来得很晚', NOTE), '他今天来得很晚', '段首有空格也算行首')
+assert.equal(
+  markValueOf('〔记〕他今天来得很晚\nit works but that is not a summary', NOTE),
+  '他今天来得很晚',
+  '只取标记那一行',
+)
+assert.equal(markValueOf('〔记〕English only summary', NOTE), 'English only summary', '英文照样记')
+
 writeFileSync(globalPath(), '# 人设\n\n正文。\n', 'utf8')
 const line1 = appendMemory('记忆格式改成这轮的总结', new Date('2026-10-28T14:20:00+08:00').getTime())
 assert.equal(line1, '- 2026-10-28 14:20："记忆格式改成这轮的总结"Weight=1；')
@@ -184,6 +209,24 @@ assert.equal(noteRes.status, 200)
 const afterNote = readFileSync(globalPath(), 'utf8')
 assert.ok(afterNote.includes('把记忆格式改成她写总结，宿主只落盘'), '〔记〕没写进去')
 assert.equal(memoryLines(), afterFirst, '〔记〕应该替换那行，而不是多一条')
+
+// 英文的〔记〕照样收：不能假设用户只写中文，脏不脏靠「只取第一行」挡
+const enBody = JSON.stringify({
+  session: 'mem-test',
+  seq: 1,
+  text: 'Talked about the memory rewrite.\nExtra line that is not the summary.',
+})
+const enStream = Readable.from([Buffer.from(enBody, 'utf8')])
+const enRes = await hit(memHandler, {
+  url: '/api/agent-md/memory',
+  method: 'POST',
+  on: enStream.on.bind(enStream),
+  destroy() {},
+})
+assert.equal(enRes.status, 200, '英文也该记')
+const enFile = readFileSync(globalPath(), 'utf8')
+assert.ok(enFile.includes('Talked about the memory rewrite.'), '英文没落盘')
+assert.ok(!enFile.includes('Extra line that is not the summary'), '第二行不该收进去')
 
 // 测完把文件恢复，后面 /state 的断言还指望原内容
 writeFileSync(globalPath(), '# 新版人格\n', 'utf8')
