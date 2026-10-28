@@ -86,7 +86,7 @@ const samePruned = pruneOldestMemory(sameWeight, 400)
 assert.ok(samePruned.content.includes('乙') && !samePruned.content.includes('甲'), '同权重应按时间删旧的')
 // 权重解析：没写当 1
 assert.equal(weightOf('- 2026-10-28 10:00 没写权重'), 1)
-assert.equal(weightOf('- 2026-10-28 10:00 写了 + Weight=4'), 4)
+assert.equal(weightOf('- 2026-10-28 10:00：`"写了`"Weight=4；'), 4)
 
 // 6.7) 记忆自动落盘：兜底只写用户真打的那句（跳过宿主塞进去的大块上下文和工具输出），
 //      她自己写来的〔记〕再把那一行换成真正的总结
@@ -107,7 +107,7 @@ assert.equal(
 
 writeFileSync(globalPath(), '# 人设\n\n正文。\n', 'utf8')
 const line1 = appendMemory('记忆格式改成这轮的总结', new Date('2026-10-28T14:20:00+08:00').getTime())
-assert.equal(line1, '- 2026-10-28 14:20 记忆格式改成这轮的总结 + Weight=1')
+assert.equal(line1, '- 2026-10-28 14:20："记忆格式改成这轮的总结"Weight=1；')
 const written = readFileSync(globalPath(), 'utf8')
 assert.ok(written.includes('## 记忆'), '没有自动补出「## 记忆」一节')
 assert.ok(written.includes('正文。'), '正文被动了')
@@ -117,7 +117,7 @@ assert.ok(written.includes(line1 ?? ''), '记忆没写进文件')
 const t1 = new Date('2026-10-28T14:20:00+08:00').getTime()
 const t2 = new Date('2026-10-28T16:06:00+08:00').getTime()
 const merged = appendMemory('记忆格式改成这轮对话的总结', t2)
-assert.equal(merged, '- 2026-10-28 16:06 记忆格式改成这轮对话的总结 + Weight=2')
+assert.equal(merged, '- 2026-10-28 16:06："记忆格式改成这轮对话的总结"Weight=2；')
 const mergedFile = readFileSync(globalPath(), 'utf8')
 assert.equal(mergedFile.split('\n').filter((l) => l.startsWith('- 2026-')).length, 1, '相似的两条应该合成一条')
 assert.ok(mergedFile.includes('Weight=2'), '权重没加一')
