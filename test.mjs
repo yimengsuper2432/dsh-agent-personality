@@ -109,7 +109,26 @@ let annoyed = ''
 for (let i = 0; i < 7; i += 1) annoyed = closingFor('mood-annoyed', at(12) + i * 60 * 60 * 1000).mood
 assert.equal(annoyed, 'annoyed')
 
-// 9) client 半：能在假 window 里注册 settings.section，且组件是函数
+// 9) 关系网解析：只认「甲 -> 乙：关系」，注释/标题/自环都不算
+const rel = mod.parseRelations([
+  '# 关系',
+  '<!-- 注释 -->',
+  '- 宵崎奏 -> 朝比奈真冬：队友',
+  '- 东云绘名 → 星乃一歌: 同学',
+  '乱写一行没有箭头',
+  '- 宵崎奏 -> 宵崎奏：自己',
+  '- 宵崎奏 -> 朝比奈真冬：队友',
+].join('\n'))
+assert.deepEqual(rel.nodes.slice().sort(), ['东云绘名', '星乃一歌', '朝比奈真冬', '宵崎奏'].sort())
+assert.equal(rel.edges.length, 2, '重复行和自环不该进图')
+assert.deepEqual(rel.edges[1], { from: '东云绘名', to: '星乃一歌', label: '同学' })
+
+const relRes = await call({ url: '/api/agent-md/relations', method: 'GET', on() {}, destroy() {} })
+assert.equal(relRes.status, 200)
+assert.deepEqual(relRes.body.nodes, [])
+assert.equal(relRes.body.exists, false, '还没建 RELATIONS.md 时应该报不存在')
+
+// 10) client 半：能在假 window 里注册 settings.section，且组件是函数
 const { readFileSync: readClient } = await import('node:fs')
 const vm = await import('node:vm')
 const source = readClient(new URL('./lib/client.js', import.meta.url), 'utf8')
@@ -153,12 +172,15 @@ clientExports.apply({
     },
   },
 })
-assert.deepEqual(injected.sort(), ['conversation.chat.turnTail', 'settings.section'], '插了两个槽')
-const settings = slots.filter((m) => m.name === 'settings.section')[0]
-assert.equal(settings.id, 'agent-md')
+assert.deepEqual(injected.sort(), ['conversation.chat.turnTail', 'settings.section', 'settings.section'], '插了三处槽')
+const settings = slots.filter((m) => m.name === 'settings.section' && m.id === 'agent-md')[0]
 assert.equal(typeof settings.label, 'function')
+assert.equal(settings.label(), '虚拟人物')
+const relations = slots.filter((m) => m.name === 'settings.section' && m.id === 'agent-md-relations')[0]
+assert.equal(relations.order, 47, '关系网分区没注册')
+assert.equal(relations.label(), '关系网')
 const tail = slots.filter((m) => m.name === 'conversation.chat.turnTail')[0]
 assert.equal(tail.order, 11, '收尾语要排在费用行（order 10）之后')
 
 rmSync(home, { recursive: true, force: true })
-console.log('ok: 11 组断言通过（全局注入 / 注释剥离 / 模板降级 / 忽略项目人格 / 接口注册 / 保存与备份 / 2 MB 上限 / state 接口 / 心情判定 / 设置页与收尾语插槽）')
+console.log('ok: 12 组断言通过（全局注入 / 注释剥离 / 模板降级 / 忽略项目人格 / 接口注册 / 保存与备份 / 2 MB 上限 / state 接口 / 心情判定 / 关系解析与接口 / 三个插槽齐活）')
