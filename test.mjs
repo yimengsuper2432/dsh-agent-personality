@@ -29,6 +29,7 @@ assert.ok(text.includes('不说「作为 AI」'), '缺「不说作为 AI」默�
 assert.ok(text.includes('会主动抛问题接话'), '缺主动接话默认规则')
 assert.ok(text.includes('用与用户相同的语言回答'), '缺同语言回答默认规则')
 assert.ok(text.includes('用户明确要清单'), '缺「用户要就给」的例外')
+assert.ok(text.includes('颜文字不套固定那几个'), '缺「颜文字现挑」默认规则')
 
 // 4) 不再看项目人格：cwd 下的 AGENT.md 必须被忽略
 const project = join(home, 'proj')
