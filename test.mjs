@@ -7,7 +7,7 @@ const home = mkdtempSync(join(tmpdir(), 'agent-md-test-'))
 process.env.DSH_HOME = home
 
 const mod = await import('./lib/index.js')
-const { readPersona, globalPath, sanitizeForHost, savePersona, createHandler, apply, pruneOldestMemory, summarizeTurn, appendMemory, weightOf, similarity } = mod
+const { readPersona, globalPath, sanitizeForHost, savePersona, createHandler, apply, pruneOldestMemory, summarizeTurn, appendMemory, weightOf, similarity, bumpWeight, numberMemoryLines } = mod
 
 // 1) 空目录：不注入空段落
 assert.equal(readPersona(), '')
@@ -73,9 +73,10 @@ const memoryDoc = [
   '结尾说明也不该被删。',
 ].join('\n')
 const pruned = pruneOldestMemory(memoryDoc, 500)
-assert.equal(pruned.removed, 2, '应该先删权重最低的两条')
+// 到上限就砍 20%：3 条 → 至少砍 1 条，权重最低的先走
+assert.equal(pruned.removed, 1, '应该按 20% 砍掉权重最低的那条')
 assert.ok(!pruned.content.includes('最旧的一条'), '最低权重的没删')
-assert.ok(!pruned.content.includes('中间的一条'), '最低权重的没删完')
+assert.ok(pruned.content.includes('中间的一条'), '只砍 20%，第二条该留着')
 assert.ok(pruned.content.includes('权重高的老记忆'), '高权重的不该先删')
 assert.ok(pruned.content.includes('正文不该被删'), '正文被误删')
 assert.ok(pruned.content.includes('结尾说明也不该被删'), '结尾被误删')
@@ -113,20 +114,38 @@ assert.ok(written.includes('## 记忆'), '没有自动补出「## 记忆」一�
 assert.ok(written.includes('正文。'), '正文被动了')
 assert.ok(written.includes(line1 ?? ''), '记忆没写进文件')
 
-// 6.8) 相似（≥80%）合并成一条：时间用最新的、权重 +1、旧行删掉
+// 6.8) 同一件事再提也不合并：旧的留着、新的另起一条 Weight=1，
+//      模型标了〔重提〕编号才给旧那条 +1
 const t1 = new Date('2026-10-28T14:20:00+08:00').getTime()
 const t2 = new Date('2026-10-28T16:06:00+08:00').getTime()
-const merged = appendMemory('记忆格式改成这轮对话的总结', t2)
-assert.equal(merged, '- 2026-10-28 16:06："记忆格式改成这轮对话的总结"Weight=2；')
-const mergedFile = readFileSync(globalPath(), 'utf8')
-assert.equal(mergedFile.split('\n').filter((l) => l.startsWith('- 2026-')).length, 1, '相似的两条应该合成一条')
-assert.ok(mergedFile.includes('Weight=2'), '权重没加一')
-assert.ok(!mergedFile.includes('14:20'), '旧的时间该被换掉')
-assert.ok(similarity('记忆格式改成这轮的总结', '记忆格式改成这轮对话的总结') >= 0.8, '这条该判相似')
-assert.ok(similarity('他问起美织，我先把译名说错了', '他要去上课了，把话头留着') < 0.8, '无关的两条不该判相似')
-// 不像的新起一条 Weight=1
+assert.ok(similarity('记忆格式改成这轮的总结', '记忆格式改成这轮对话的总结') >= 0.8, '这条字面很像')
+const added = appendMemory('记忆格式改成这轮对话的总结', t2)
+assert.equal(added, '- 2026-10-28 16:06："记忆格式改成这轮对话的总结"Weight=1；')
+const memoryRows = () => readFileSync(globalPath(), 'utf8').split('\n').filter((l) => l.startsWith('- 2026-'))
+assert.equal(memoryRows().length, 2, '再像也留两条，不再合并')
+assert.equal(memoryRows()[1], added, '新的是 Weight=1')
+
+// 重提：模型标〔重提〕1 → 第 1 条 +1
+assert.equal(bumpWeight(1), 2)
+assert.equal(weightOf(memoryRows()[0]), 2)
+assert.equal(weightOf(memoryRows()[1]), 1, '新的那条不该被动')
+// 编号越界/非法：什么都不做
+assert.equal(bumpWeight(99), null)
+assert.equal(bumpWeight(0), null)
+assert.equal(bumpWeight('x'), null)
+// 封顶 8
+for (let i = 0; i < 10; i += 1) bumpWeight(1)
+assert.equal(weightOf(memoryRows()[0]), 8, '权重该封顶 8')
+
+// 注入时给记忆行编号（只改注入文本，不动文件）
+assert.equal(
+  numberMemoryLines('- 2026-10-28 10:00："x"Weight=1；\n正文'),
+  '[1] - 2026-10-28 10:00："x"Weight=1；\n正文',
+)
+
+// 不像的也新起一条 Weight=1
 appendMemory('他要去上课了，把话头留着', t2)
-assert.equal(readFileSync(globalPath(), 'utf8').split('\n').filter((l) => l.startsWith('- 2026-')).length, 2, '不像的应该另起一条')
+assert.equal(memoryRows().length, 3, '每条都独立')
 
 // 走一遍真实接口：/closing 会顺手把这一轮记下来
 async function hit(handler, req) {
@@ -149,7 +168,7 @@ const memoryLines = () => readFileSync(globalPath(), 'utf8').trim().split('\n').
 const afterFirst = memoryLines()
 await hit(memHandler, { url: '/api/agent-md/closing?session=mem-test&seq=1', method: 'GET', on() {}, destroy() {} })
 assert.equal(memoryLines(), afterFirst, '同一轮重复记了')
-assert.equal(afterFirst, 2, '记忆条数不对')
+assert.equal(afterFirst, 4, '记忆条数不对')
 
 // 她写来〔记〕：把这一轮先垫的那行换成真正的总结，不该多出一条
 const { Readable } = await import('node:stream')
