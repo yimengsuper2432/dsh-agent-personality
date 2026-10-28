@@ -356,7 +356,7 @@ const readRaw = () => readFileSync(globalPath(), 'utf8')
 
 assert.equal(appendProfile('桃井爱莉：喜欢草莓蛋糕'), '桃井爱莉：喜欢草莓蛋糕')
 let raw = readRaw()
-assert.ok(raw.includes('    原偶像。嘴上凶。喜欢草莓蛋糕。(对桃井爱莉的总结)'), '没并进那段总结')
+assert.ok(raw.includes('    原偶像。嘴上凶。喜欢草莓蛋糕。'), '没并进那段总结')
 
 // 同类再添一项，还是那一句
 assert.equal(appendProfile('桃井爱莉：喜欢布丁'), '桃井爱莉：喜欢布丁')
@@ -385,7 +385,7 @@ raw = readRaw()
 assert.ok(raw.includes('- 桐谷遥：'), '老格式没升级')
 assert.ok(!raw.includes('**桐谷遥**'), '老格式的星号还在')
 assert.ok(
-  raw.includes('    原人气偶像。表情不太外露。喜欢安静的地方。(对桐谷遥的总结)'),
+  raw.includes('    原人气偶像。表情不太外露。喜欢安静的地方。'),
   '升级后内容不对',
 )
 
@@ -394,7 +394,7 @@ assert.equal(appendProfile('朝比奈真冬：喜欢安静'), '朝比奈真冬�
 raw = readRaw()
 assert.ok(raw.includes('## 补记的人'), '缺补记段落')
 assert.ok(raw.includes('- 朝比奈真冬：'), '补记名字行不对')
-assert.ok(raw.includes('    喜欢安静。(对朝比奈真冬的总结)'), '补记内容不对')
+assert.ok(raw.includes('    喜欢安静。'), '补记内容不对')
 assert.equal(appendProfile('格式不对'), null, '没有冒号的不该收')
 
 
