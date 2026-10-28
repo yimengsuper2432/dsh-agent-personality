@@ -172,13 +172,15 @@ clientExports.apply({
     },
   },
 })
-assert.deepEqual(injected.sort(), ['conversation.chat.turnTail', 'settings.section'], '插了两处槽')
+assert.deepEqual(injected.sort(), ['conversation.chat.turnTail', 'settings.section', 'settings.section'], '插了三处槽')
 const settings = slots.filter((m) => m.name === 'settings.section' && m.id === 'agent-md')[0]
 assert.equal(typeof settings.label, 'function')
 assert.equal(settings.label(), '虚拟人物')
-assert.equal(slots.filter((m) => m.id === 'agent-md-relations').length, 0, '关系网不再单独成页，应嵌在虚拟记忆里')
+const relations = slots.filter((m) => m.name === 'settings.section' && m.id === 'agent-md-relations')[0]
+assert.equal(relations.order, 47, '关系网分区没注册')
+assert.equal(relations.label(), '关系网')
 const tail = slots.filter((m) => m.name === 'conversation.chat.turnTail')[0]
 assert.equal(tail.order, 11, '收尾语要排在费用行（order 10）之后')
 
 rmSync(home, { recursive: true, force: true })
-console.log('ok: 12 组断言通过（全局注入 / 注释剥离 / 模板降级 / 忽略项目人格 / 接口注册 / 保存与备份 / 2 MB 上限 / state 接口 / 心情判定 / 关系解析与接口 / 两个插槽 + 关系网内嵌）')
+console.log('ok: 12 组断言通过（全局注入 / 注释剥离 / 模板降级 / 忽略项目人格 / 接口注册 / 保存与备份 / 2 MB 上限 / state 接口 / 心情判定 / 关系解析与接口 / 三个插槽齐活）')
