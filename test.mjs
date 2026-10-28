@@ -352,22 +352,36 @@ writeFileSync(
   globalPath(),
   ['# 人设', '', '- **桃井爱莉**：原偶像。嘴上凶。', '- **桐谷遥**：冷静自持。', '', '## 记忆', ''].join('\n'),
 )
+const readRaw = () => readFileSync(globalPath(), 'utf8')
+
+// 喜欢归一行、讨厌归另一行
 assert.equal(appendProfile('桃井爱莉：喜欢草莓蛋糕'), '桃井爱莉：喜欢草莓蛋糕')
-let raw = readFileSync(globalPath(), 'utf8')
-assert.ok(raw.includes('  - 喜欢草莓蛋糕'), '没挂到条目下面')
-assert.ok(
-  raw.indexOf('喜欢草莓蛋糕') > raw.indexOf('**桃井爱莉**') &&
-    raw.indexOf('喜欢草莓蛋糕') < raw.indexOf('**桐谷遥**'),
-  '插到别人头上去了',
-)
-assert.equal(appendProfile('桃井爱莉：喜欢草莓蛋糕'), null, '同一句不该加两次')
-assert.equal(appendProfile('桃井爱莉：不喜欢胡萝卜'), '桃井爱莉：不喜欢胡萝卜')
-raw = readFileSync(globalPath(), 'utf8')
-assert.ok(raw.includes('原偶像。嘴上凶。'), '旧的不该被删')
-assert.ok(raw.includes('  - 喜欢草莓蛋糕') && raw.includes('  - 不喜欢胡萝卜'), '第二条没加上')
+assert.equal(appendProfile('桃井爱莉：喜欢布丁'), '桃井爱莉：喜欢布丁')
+assert.equal(appendProfile('桃井爱莉：讨厌被人说可爱'), '桃井爱莉：讨厌被人说可爱')
+let raw = readRaw()
+assert.ok(raw.includes('  - 喜欢草莓蛋糕、布丁'), '喜欢的没并到同一行')
+assert.ok(raw.includes('  - 讨厌被人说可爱'), '讨厌的没单独一行')
+assert.equal(raw.split('\n').filter((line) => line.includes('喜欢')).length, 1, '喜欢占了不止一行')
+
+// 撞到对面：以这次对话为准，旧的从喜欢行里摘掉
+assert.equal(appendProfile('桃井爱莉：不喜欢草莓蛋糕'), '桃井爱莉：不喜欢草莓蛋糕')
+raw = readRaw()
+assert.ok(!raw.includes('喜欢草莓蛋糕'), '冲突的旧说法没摘掉')
+assert.ok(raw.includes('  - 喜欢布丁'), '没冲突的那项不该动')
+assert.ok(raw.includes('  - 讨厌被人说可爱、草莓蛋糕'), '冲突项没进讨厌行')
+
+// 重复的不加第二次
+assert.equal(appendProfile('桃井爱莉：喜欢布丁'), null, '同一项不该加两次')
+
+// 普通信息仍然一件一行
+assert.equal(appendProfile('桃井爱莉：弟弟叫彰人'), '桃井爱莉：弟弟叫彰人')
+raw = readRaw()
+assert.ok(raw.includes('  - 弟弟叫彰人'), '普通信息没挂上')
+assert.ok(raw.indexOf('弟弟叫彰人') < raw.indexOf('**桐谷遥**'), '插到别人头上去了')
+
 // 档案里还没有的人：单开一段，不往别人条目里塞
 assert.equal(appendProfile('朝比奈真冬：喜欢安静'), '朝比奈真冬：喜欢安静')
-raw = readFileSync(globalPath(), 'utf8')
+raw = readRaw()
 assert.ok(raw.includes('## 补记的人'), '缺补记段落')
 assert.ok(raw.includes('- **朝比奈真冬**：喜欢安静'), '补记条目不对')
 assert.equal(appendProfile('格式不对'), null, '没有冒号的不该收')
