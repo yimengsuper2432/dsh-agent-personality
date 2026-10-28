@@ -7,7 +7,7 @@ const home = mkdtempSync(join(tmpdir(), 'agent-md-test-'))
 process.env.DSH_HOME = home
 
 const mod = await import('./lib/index.js')
-const { readPersona, globalPath, sanitizeForHost, savePersona, createHandler, apply } = mod
+const { readPersona, globalPath, sanitizeForHost, savePersona, createHandler, apply, pruneOldestMemory } = mod
 
 // 1) 空目录：不注入空段落
 assert.equal(readPersona(), '')
@@ -61,6 +61,24 @@ await assert.rejects(
   (error) => error.status === 413 && error.message.includes('2 MB'),
 )
 assert.equal(readFileSync(globalPath(), 'utf8'), '# 新版人格\n')
+
+// 6.6) 超过上限按时间删最旧的记忆行，正文和没时间戳的内容都不动
+const filler = 'x'.repeat(300)
+const memoryDoc = [
+  '# 人设',
+  '正文不该被删。',
+  '- 2026-10-20 09:00 最旧的一条记忆 ' + filler,
+  '- 2026-10-26 22:10 中间的一条记忆 ' + filler,
+  '- 2026-10-28 13:20 最新的一条记忆 ' + filler,
+  '结尾说明也不该被删。',
+].join('\n')
+const pruned = pruneOldestMemory(memoryDoc, 700)
+assert.equal(pruned.removed, 2, '应该先删最旧的两条')
+assert.ok(!pruned.content.includes('最旧的一条'), '最旧的记忆还在')
+assert.ok(pruned.content.includes('最新的一条'), '最新的记忆被误删')
+assert.ok(pruned.content.includes('正文不该被删'), '正文被误删')
+assert.ok(pruned.content.includes('结尾说明也不该被删'), '结尾被误删')
+assert.equal(pruneOldestMemory(memoryDoc, 10 * 1024 * 1024).removed, 0, '没超上限不该动')
 
 // 7) GET /state 走真实 handler
 const handler = createHandler()
@@ -161,4 +179,4 @@ const tail = slots.filter((m) => m.name === 'conversation.chat.turnTail')[0]
 assert.equal(tail.order, 11, '收尾语要排在费用行（order 10）之后')
 
 rmSync(home, { recursive: true, force: true })
-console.log('ok: 11 组断言通过（全局注入 / 注释剥离 / 模板降级 / 忽略项目人格 / 接口注册 / 保存与备份 / 2 MB 上限 / state 接口 / 心情判定 / 设置页与收尾语插槽）')
+console.log('ok: 12 组断言通过（全局注入 / 注释剥离 / 模板降级 / 忽略项目人格 / 接口注册 / 保存与备份 / 2 MB 上限 / 记忆按时间淘汰 / state 接口 / 心情判定 / 设置页与收尾语插槽）')
