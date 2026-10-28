@@ -1,9 +1,9 @@
 {
   "name": "dsh-agent-md",
-  "version": "0.2.0",
+  "version": "0.6.0",
   "private": true,
   "type": "module",
-  "description": "AGENT.md 人格配置 —— 像 VS Code 那样用 Markdown 配置模型人格/性格：全局一份 + 每个项目一份（项目覆盖全局），可在设置页可视化编辑，也能一键打开原文件。",
+  "description": "全局 AGENT.md 人格：注入系统提示 + 设置里一个只编辑全局人格的页面（无项目人格）。",
   "keywords": [
     "deepseek",
     "deepseek-harness",
@@ -42,7 +42,7 @@
     "type": "git",
     "url": "git+https://github.com/wwsmiler1-bit/dsh-agent-md.git"
   },
-  "homepage": "https://github.com/wwsmiler1-bit/dsh-agent-md#readme",
+  "homepage": "https://github.com/wwsmiler1-bit/dsh-agent-md",
   "bugs": {
     "url": "https://github.com/wwsmiler1-bit/dsh-agent-md/issues"
   },
