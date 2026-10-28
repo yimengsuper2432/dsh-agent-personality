@@ -7,7 +7,7 @@ const home = mkdtempSync(join(tmpdir(), 'agent-md-test-'))
 process.env.DSH_HOME = home
 
 const mod = await import('./lib/index.js')
-const { readPersona, globalPath, sanitizeForHost, savePersona, createHandler, apply, pruneOldestMemory, summarizeTurn, appendMemory, weightOf, similarity, bumpWeight, numberMemoryLines } = mod
+const { readPersona, globalPath, sanitizeForHost, savePersona, createHandler, apply, pruneOldestMemory, summarizeTurn, appendMemory, weightOf, similarity, bumpWeight, numberMemoryLines, appendProfile } = mod
 
 // 1) 空目录：不注入空段落
 assert.equal(readPersona(), '')
@@ -347,5 +347,31 @@ assert.equal(typeof settings.label, 'function')
 const tail = slots.filter((m) => m.name === 'conversation.chat.turnTail')[0]
 assert.equal(tail.order, 11, '收尾语要排在费用行（order 10）之后')
 
+// 档案：说到某个角色的新信息，挂到那个人的条目下面，只添不改
+writeFileSync(
+  globalPath(),
+  ['# 人设', '', '- **桃井爱莉**：原偶像。嘴上凶。', '- **桐谷遥**：冷静自持。', '', '## 记忆', ''].join('\n'),
+)
+assert.equal(appendProfile('桃井爱莉：喜欢草莓蛋糕'), '桃井爱莉：喜欢草莓蛋糕')
+let raw = readFileSync(globalPath(), 'utf8')
+assert.ok(raw.includes('  - 喜欢草莓蛋糕'), '没挂到条目下面')
+assert.ok(
+  raw.indexOf('喜欢草莓蛋糕') > raw.indexOf('**桃井爱莉**') &&
+    raw.indexOf('喜欢草莓蛋糕') < raw.indexOf('**桐谷遥**'),
+  '插到别人头上去了',
+)
+assert.equal(appendProfile('桃井爱莉：喜欢草莓蛋糕'), null, '同一句不该加两次')
+assert.equal(appendProfile('桃井爱莉：不喜欢胡萝卜'), '桃井爱莉：不喜欢胡萝卜')
+raw = readFileSync(globalPath(), 'utf8')
+assert.ok(raw.includes('原偶像。嘴上凶。'), '旧的不该被删')
+assert.ok(raw.includes('  - 喜欢草莓蛋糕') && raw.includes('  - 不喜欢胡萝卜'), '第二条没加上')
+// 档案里还没有的人：单开一段，不往别人条目里塞
+assert.equal(appendProfile('朝比奈真冬：喜欢安静'), '朝比奈真冬：喜欢安静')
+raw = readFileSync(globalPath(), 'utf8')
+assert.ok(raw.includes('## 补记的人'), '缺补记段落')
+assert.ok(raw.includes('- **朝比奈真冬**：喜欢安静'), '补记条目不对')
+assert.equal(appendProfile('格式不对'), null, '没有冒号的不该收')
+
+
 rmSync(home, { recursive: true, force: true })
-console.log('ok: 13 组断言通过（全局注入 / 注释剥离 / 模板降级 / 忽略项目人格 / 接口注册 / 保存与备份 / 2 MB 上限 / 记忆按时间淘汰 / state 接口 / 心情判定 / 收尾语不重样 / 设置页与收尾语插槽）')
+console.log('ok: 14 组断言通过（全局注入 / 注释剥离 / 模板降级 / 忽略项目人格 / 接口注册 / 保存与备份 / 2 MB 上限 / 记忆按时间淘汰 / state 接口 / 心情判定 / 收尾语不重样 / 设置页与收尾语插槽 / 角色档案追加）')
