@@ -80,19 +80,21 @@ assert.ok(pruned.content.includes('正文不该被删'), '正文被误删')
 assert.ok(pruned.content.includes('结尾说明也不该被删'), '结尾被误删')
 assert.equal(pruneOldestMemory(memoryDoc, 10 * 1024 * 1024).removed, 0, '没超上限不该动')
 
-// 6.7) 记忆自动落盘：一轮对话压成一句话，追加进「## 记忆」，同一轮不重复记
+// 6.7) 记忆自动落盘：兜底只写用户真打的那句（跳过宿主塞进去的大块上下文），
+//      她自己写来的〔记〕再把那一行换成真正的总结
 const turnEvents = [
   { type: 'turn/start', data: {} },
-  { type: 'user/message', data: { content: [{ type: 'text', text: '插件弄完了，你好有什么需要尽管告诉我' }] } },
-  { type: 'assistant/message', data: { message: { content: [{ type: 'text', text: '诶嘿，那我就不客气了。' }] } } },
+  { type: 'user/message', data: { content: [{ type: 'text', text: 'Current runtime context. 一大坨宿主上下文' }] } },
+  { type: 'user/message', data: { content: [{ type: 'text', text: '记忆格式改成这轮的总结' }] } },
+  { type: 'assistant/message', data: { message: { content: [{ type: 'text', text: '行，改成你写〔记〕我落盘。' }] } } },
 ]
-assert.equal(summarizeTurn(turnEvents), '用户说：插件弄完了，你好有什么需要尽管告诉我；我回：诶嘿，那我就不客气了。')
+assert.equal(summarizeTurn(turnEvents), '记忆格式改成这轮的总结')
 assert.equal(summarizeTurn([]), '')
-assert.equal(summarizeTurn([{ type: 'user/message', data: { content: [{ type: 'text', text: '你好' }] } }]), '用户说：你好')
+assert.equal(summarizeTurn([{ type: 'user/message', data: { content: [{ type: 'text', text: '你好' }] } }]), '你好')
 
 writeFileSync(globalPath(), '# 人设\n\n正文。\n', 'utf8')
-const line1 = appendMemory(summarizeTurn(turnEvents), new Date('2026-10-28T14:20:00+08:00').getTime())
-assert.equal(line1, '- 2026-10-28 14:20 用户说：插件弄完了，你好有什么需要尽管告诉我；我回：诶嘿，那我就不客气了。')
+const line1 = appendMemory('记忆格式改成这轮的总结', new Date('2026-10-28T14:20:00+08:00').getTime())
+assert.equal(line1, '- 2026-10-28 14:20 记忆格式改成这轮的总结')
 const written = readFileSync(globalPath(), 'utf8')
 assert.ok(written.includes('## 记忆'), '没有自动补出「## 记忆」一节')
 assert.ok(written.includes('正文。'), '正文被动了')
@@ -120,6 +122,21 @@ const afterFirst = memoryLines()
 await hit(memHandler, { url: '/api/agent-md/closing?session=mem-test&seq=1', method: 'GET', on() {}, destroy() {} })
 assert.equal(memoryLines(), afterFirst, '同一轮重复记了')
 assert.equal(afterFirst, 2, '记忆条数不对')
+
+// 她写来〔记〕：把这一轮先垫的那行换成真正的总结，不该多出一条
+const { Readable } = await import('node:stream')
+const noteBody = JSON.stringify({ session: 'mem-test', seq: 1, text: '把记忆格式改成她写总结，宿主只落盘' })
+const noteStream = Readable.from([Buffer.from(noteBody, 'utf8')])
+const noteRes = await hit(memHandler, {
+  url: '/api/agent-md/memory',
+  method: 'POST',
+  on: noteStream.on.bind(noteStream),
+  destroy() {},
+})
+assert.equal(noteRes.status, 200)
+const afterNote = readFileSync(globalPath(), 'utf8')
+assert.ok(afterNote.includes('把记忆格式改成她写总结，宿主只落盘'), '〔记〕没写进去')
+assert.equal(memoryLines(), afterFirst, '〔记〕应该替换那行，而不是多一条')
 
 // 测完把文件恢复，后面 /state 的断言还指望原内容
 writeFileSync(globalPath(), '# 新版人格\n', 'utf8')
