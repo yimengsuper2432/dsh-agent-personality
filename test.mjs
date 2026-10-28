@@ -23,6 +23,12 @@ assert.ok(text.includes('# 你是谁'), '正文缺失')
 assert.ok(!text.includes('这是给我自己看的'), 'HTML 注释没被剥掉')
 assert.ok(text.includes('{名字}') && !text.includes('{{名字}}'), '模板变量没降级')
 assert.ok(text.includes(globalPath()), '缺适用文件路径')
+// 默认说话方式是插件自带的：人格 md 里一个字不写也要生效
+assert.ok(text.includes('短句为主'), '缺默认短句规则')
+assert.ok(text.includes('不说「作为 AI」'), '缺「不说作为 AI」默认规则')
+assert.ok(text.includes('会主动抛问题接话'), '缺主动接话默认规则')
+assert.ok(text.includes('用与用户相同的语言回答'), '缺同语言回答默认规则')
+assert.ok(text.includes('用户明确要清单'), '缺「用户要就给」的例外')
 
 // 4) 不再看项目人格：cwd 下的 AGENT.md 必须被忽略
 const project = join(home, 'proj')
