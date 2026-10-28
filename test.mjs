@@ -7,7 +7,7 @@ const home = mkdtempSync(join(tmpdir(), 'agent-md-test-'))
 process.env.DSH_HOME = home
 
 const mod = await import('./lib/index.js')
-const { readPersona, globalPath, sanitizeForHost, savePersona, createHandler, apply, pruneOldestMemory } = mod
+const { readPersona, globalPath, sanitizeForHost, savePersona, createHandler, apply, pruneOldestMemory, summarizeTurn, appendMemory } = mod
 
 // 1) 空目录：不注入空段落
 assert.equal(readPersona(), '')
@@ -79,6 +79,50 @@ assert.ok(pruned.content.includes('最新的一条'), '最新的记忆被误删'
 assert.ok(pruned.content.includes('正文不该被删'), '正文被误删')
 assert.ok(pruned.content.includes('结尾说明也不该被删'), '结尾被误删')
 assert.equal(pruneOldestMemory(memoryDoc, 10 * 1024 * 1024).removed, 0, '没超上限不该动')
+
+// 6.7) 记忆自动落盘：一轮对话压成一句话，追加进「## 记忆」，同一轮不重复记
+const turnEvents = [
+  { type: 'turn/start', data: {} },
+  { type: 'user/message', data: { content: [{ type: 'text', text: '插件弄完了，你好有什么需要尽管告诉我' }] } },
+  { type: 'assistant/message', data: { message: { content: [{ type: 'text', text: '诶嘿，那我就不客气了。' }] } } },
+]
+assert.equal(summarizeTurn(turnEvents), '用户说：插件弄完了，你好有什么需要尽管告诉我；我回：诶嘿，那我就不客气了。')
+assert.equal(summarizeTurn([]), '')
+assert.equal(summarizeTurn([{ type: 'user/message', data: { content: [{ type: 'text', text: '你好' }] } }]), '用户说：你好')
+
+writeFileSync(globalPath(), '# 人设\n\n正文。\n', 'utf8')
+const line1 = appendMemory(summarizeTurn(turnEvents), new Date('2026-10-28T14:20:00+08:00').getTime())
+assert.equal(line1, '- 2026-10-28 14:20 用户说：插件弄完了，你好有什么需要尽管告诉我；我回：诶嘿，那我就不客气了。')
+const written = readFileSync(globalPath(), 'utf8')
+assert.ok(written.includes('## 记忆'), '没有自动补出「## 记忆」一节')
+assert.ok(written.includes('正文。'), '正文被动了')
+assert.ok(written.includes(line1 ?? ''), '记忆没写进文件')
+
+// 走一遍真实接口：/closing 会顺手把这一轮记下来
+async function hit(handler, req) {
+  const result = { status: 0, body: null }
+  const res = {
+    writeHead(status) { result.status = status },
+    end(text) { result.body = JSON.parse(text) },
+  }
+  await handler(req, res)
+  return result
+}
+const memHandler = createHandler({
+  get: (name) => (name === 'sessionController'
+    ? { inspect: async () => ({ events: turnEvents }) }
+    : undefined),
+})
+const closingRes = await hit(memHandler, { url: '/api/agent-md/closing?session=mem-test&seq=1', method: 'GET', on() {}, destroy() {} })
+assert.equal(closingRes.status, 200)
+const memoryLines = () => readFileSync(globalPath(), 'utf8').trim().split('\n').filter((l) => l.startsWith('- 2026-')).length
+const afterFirst = memoryLines()
+await hit(memHandler, { url: '/api/agent-md/closing?session=mem-test&seq=1', method: 'GET', on() {}, destroy() {} })
+assert.equal(memoryLines(), afterFirst, '同一轮重复记了')
+assert.equal(afterFirst, 2, '记忆条数不对')
+
+// 测完把文件恢复，后面 /state 的断言还指望原内容
+writeFileSync(globalPath(), '# 新版人格\n', 'utf8')
 
 // 7) GET /state 走真实 handler
 const handler = createHandler()
