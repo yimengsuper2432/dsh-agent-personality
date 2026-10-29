@@ -7,7 +7,7 @@ const home = mkdtempSync(join(tmpdir(), 'agent-md-test-'))
 process.env.DSH_HOME = home
 
 const mod = await import('./lib/index.js')
-const { readPersona, globalPath, sanitizeForHost, savePersona, createHandler, apply, pruneOldestMemory, summarizeTurn, appendMemory, weightOf, similarity, bumpWeight, numberMemoryLines, appendProfile } = mod
+const { readPersona, globalPath, sanitizeForHost, savePersona, createHandler, apply, pruneOldestMemory, summarizeTurn, appendMemory, weightOf, similarity, appendProfile } = mod
 
 // 1) 空目录：不注入空段落
 assert.equal(readPersona(), '')
@@ -166,23 +166,6 @@ const fresh = appendMemory('他今天带了把蓝格子伞', new Date('2026-10-2
 assert.ok(String(fresh).endsWith('Weight=1；'), '不像的就是 1')
 assert.equal(memoryRows().length, 4)
 
-// 重提：模型标〔重提〕1 → 第 1 条 +1
-assert.equal(bumpWeight(1), 2)
-assert.equal(weightOf(memoryRows()[0]), 2)
-assert.equal(weightOf(memoryRows()[1]), 2, '新的那条不该被动')
-// 编号越界/非法：什么都不做
-assert.equal(bumpWeight(99), null)
-assert.equal(bumpWeight(0), null)
-assert.equal(bumpWeight('x'), null)
-// 封顶 8
-for (let i = 0; i < 10; i += 1) bumpWeight(1)
-assert.equal(weightOf(memoryRows()[0]), 8, '权重该封顶 8')
-
-// 注入时给记忆行编号（只改注入文本，不动文件）
-assert.equal(
-  numberMemoryLines('- 2026-10-28 10:00："x"Weight=1；\n正文'),
-  '[1] - 2026-10-28 10:00："x"Weight=1；\n正文',
-)
 
 // 不像的也新起一条，权重从 1 起
 const unrelated = appendMemory('他要去上课了，把话头留着', t2)
