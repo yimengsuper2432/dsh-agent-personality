@@ -146,21 +146,30 @@ assert.ok(written.includes('## 记忆'), '没有自动补出「## 记忆」一�
 assert.ok(written.includes('正文。'), '正文被动了')
 assert.ok(written.includes(line1 ?? ''), '记忆没写进文件')
 
-// 6.8) 同一件事再提也不合并：旧的留着、新的另起一条 Weight=1，
-//      模型标了〔重提〕编号才给旧那条 +1
+// 6.8) 同一件事再提也不合并：旧的留着、新的另起一条，
+//      权重按字面相似度继承（≥60% 取 max +1），模型标〔重提〕再给旧那条 +1
 const t1 = new Date('2026-10-28T14:20:00+08:00').getTime()
 const t2 = new Date('2026-10-28T16:06:00+08:00').getTime()
 assert.ok(similarity('记忆格式改成这轮的总结', '记忆格式改成这轮对话的总结') >= 0.8, '这条字面很像')
 const added = appendMemory('记忆格式改成这轮对话的总结', t2)
-assert.equal(added, '- 2026-10-28 16:06："记忆格式改成这轮对话的总结"Weight=1；')
+assert.equal(added, '- 2026-10-28 16:06："记忆格式改成这轮对话的总结"Weight=2；')
 const memoryRows = () => readFileSync(globalPath(), 'utf8').split('\n').filter((l) => l.startsWith('- 2026-'))
 assert.equal(memoryRows().length, 2, '再像也留两条，不再合并')
-assert.equal(memoryRows()[1], added, '新的是 Weight=1')
+assert.equal(memoryRows()[1], added, '新的按相似度继承成 Weight=2')
+
+// 链式：第三条同样像 → 取前两条里大的那个 +1 = 3
+const third = appendMemory('记忆格式改成这轮对话里的总结', new Date('2026-10-28T17:00:00+08:00').getTime())
+assert.ok(String(third).endsWith('Weight=3；'), '第三条接上涨到 3')
+assert.equal(memoryRows().length, 3, '三条各留各的，一条都没并掉')
+// 完全不像的一条照常从 1 起
+const fresh = appendMemory('他今天带了把蓝格子伞', new Date('2026-10-28T18:00:00+08:00').getTime())
+assert.ok(String(fresh).endsWith('Weight=1；'), '不像的就是 1')
+assert.equal(memoryRows().length, 4)
 
 // 重提：模型标〔重提〕1 → 第 1 条 +1
 assert.equal(bumpWeight(1), 2)
 assert.equal(weightOf(memoryRows()[0]), 2)
-assert.equal(weightOf(memoryRows()[1]), 1, '新的那条不该被动')
+assert.equal(weightOf(memoryRows()[1]), 2, '新的那条不该被动')
 // 编号越界/非法：什么都不做
 assert.equal(bumpWeight(99), null)
 assert.equal(bumpWeight(0), null)
@@ -175,9 +184,10 @@ assert.equal(
   '[1] - 2026-10-28 10:00："x"Weight=1；\n正文',
 )
 
-// 不像的也新起一条 Weight=1
-appendMemory('他要去上课了，把话头留着', t2)
-assert.equal(memoryRows().length, 3, '每条都独立')
+// 不像的也新起一条，权重从 1 起
+const unrelated = appendMemory('他要去上课了，把话头留着', t2)
+assert.equal(weightOf(unrelated), 1, '不像的那条从 1 起')
+assert.equal(memoryRows().length, 5, '每条都独立')
 
 // 走一遍真实接口：/closing 会顺手把这一轮记下来
 async function hit(handler, req) {
@@ -194,13 +204,14 @@ const memHandler = createHandler({
     ? { inspect: async () => ({ events: turnEvents }) }
     : undefined),
 })
+const memoryLines = () => readFileSync(globalPath(), 'utf8').trim().split('\n').filter((l) => l.startsWith('- 2026-')).length
+const beforeClosing = memoryLines()
 const closingRes = await hit(memHandler, { url: '/api/agent-md/closing?session=mem-test&seq=1', method: 'GET', on() {}, destroy() {} })
 assert.equal(closingRes.status, 200)
-const memoryLines = () => readFileSync(globalPath(), 'utf8').trim().split('\n').filter((l) => l.startsWith('- 2026-')).length
 const afterFirst = memoryLines()
 await hit(memHandler, { url: '/api/agent-md/closing?session=mem-test&seq=1', method: 'GET', on() {}, destroy() {} })
 assert.equal(memoryLines(), afterFirst, '同一轮重复记了')
-assert.equal(afterFirst, 4, '记忆条数不对')
+assert.equal(afterFirst, beforeClosing + 1, '记忆条数不对')
 
 // 她写来〔记〕：把这一轮先垫的那行换成真正的总结，不该多出一条
 const { Readable } = await import('node:stream')
