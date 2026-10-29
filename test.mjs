@@ -190,6 +190,14 @@ const unrelated = appendMemory('他要去上课了，把话头留着', t2)
 assert.equal(weightOf(unrelated), 1, '不像的那条从 1 起')
 assert.equal(memoryRows().length, 5, '每条都独立')
 
+// 日常追加不碰备份：.bak 只在真删掉两成那一刻才更新
+{
+  const before = readFileSync(globalPath() + '.bak', 'utf8')
+  appendMemory('备份测试：这一句只是日常追加', new Date('2026-10-28T19:30:00+08:00').getTime())
+  assert.equal(readFileSync(globalPath() + '.bak', 'utf8'), before, '日常追加不该覆盖备份')
+}
+
+
 // 走一遍真实接口：/closing 会顺手把这一轮记下来
 async function hit(handler, req) {
   const result = { status: 0, body: null }
