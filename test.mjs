@@ -7,7 +7,7 @@ const home = mkdtempSync(join(tmpdir(), 'agent-md-test-'))
 process.env.DSH_HOME = home
 
 const mod = await import('./lib/index.js')
-const { readPersona, globalPath, sanitizeForHost, savePersona, createHandler, apply, pruneOldestMemory, summarizeTurn, appendMemory, weightOf, similarity, appendProfile } = mod
+const { readPersona, globalPath, sanitizeForHost, savePersona, createHandler, apply, pruneOldestMemory, summarizeTurn, appendMemory, weightOf, similarity, appendProfile, pickForInject } = mod
 
 // 1) 空目录：不注入空段落
 assert.equal(readPersona(), '')
@@ -166,6 +166,24 @@ const fresh = appendMemory('他今天带了把蓝格子伞', new Date('2026-10-2
 assert.ok(String(fresh).endsWith('Weight=1；'), '不像的就是 1')
 assert.equal(memoryRows().length, 4)
 
+
+// 注入只挑权重最高的一批，最多 200 条；没挑中的还在文件里
+{
+  const rows = []
+  for (let i = 0; i < 205; i += 1) {
+    const mm = String(i % 60).padStart(2, '0')
+    rows.push(`- 2026-01-01 00:${mm}："第${i}条"Weight=1；`)
+  }
+  rows[3] = '- 2026-01-01 02:00："最要紧的那条"Weight=8；'
+  const picked = pickForInject(['## 记忆', '', ...rows].join('\n'))
+  const kept = picked.split('\n').filter((l) => l.startsWith('- 2026-'))
+  assert.equal(kept.length, 200, '只摆 200 条')
+  assert.ok(picked.includes('最要紧的那条'), '权重高的一定留下')
+  assert.ok(!picked.includes('第0条'), '权重低的被挤掉')
+  assert.ok(picked.includes('## 记忆'), '小节标题不能被删')
+  const order = kept.map((l) => rows.indexOf(l))
+  assert.deepEqual(order, [...order].sort((a, b) => a - b), '挑完仍按原来的顺序摆')
+}
 
 // 不像的也新起一条，权重从 1 起
 const unrelated = appendMemory('他要去上课了，把话头留着', t2)
