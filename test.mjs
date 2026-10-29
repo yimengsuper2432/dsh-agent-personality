@@ -7,7 +7,7 @@ const home = mkdtempSync(join(tmpdir(), 'agent-md-test-'))
 process.env.DSH_HOME = home
 
 const mod = await import('./lib/index.js')
-const { readPersona, globalPath, sanitizeForHost, savePersona, createHandler, apply, pruneOldestMemory, summarizeTurn, appendMemory, weightOf, similarity, appendProfile, pickForInject } = mod
+const { readPersona, globalPath, sanitizeForHost, savePersona, createHandler, apply, pruneOldestMemory, summarizeTurn, appendMemory, weightOf, similarity, appendProfile, pickForInject, inheritWeight } = mod
 
 // 1) 空目录：不注入空段落
 assert.equal(readPersona(), '')
@@ -183,6 +183,16 @@ assert.equal(memoryRows().length, 4)
   assert.ok(picked.includes('## 记忆'), '小节标题不能被删')
   const order = kept.map((l) => rows.indexOf(l))
   assert.deepEqual(order, [...order].sort((a, b) => a - b), '挑完仍按原来的顺序摆')
+}
+
+// 权重不封顶：像一条 Weight=99 的，新的就是 100
+{
+  const base = '## 记忆\n\n- 2026-01-01 00:00："遥那张卡面翻出来看了半天，浅蓝头发白蝴蝶结"Weight=99；\n'
+  assert.equal(
+    inheritWeight('遥那张卡面翻出来看了半天，浅蓝头发白蝴蝶结', base),
+    100,
+    '权重不该封顶',
+  )
 }
 
 // 不像的也新起一条，权重从 1 起
