@@ -147,7 +147,7 @@ assert.ok(written.includes('正文。'), '正文被动了')
 assert.ok(written.includes(line1 ?? ''), '记忆没写进文件')
 
 // 6.8) 同一件事再提也不合并：旧的留着、新的另起一条，
-//      权重按字面相似度继承（≥60% 取 max +1），模型标〔重提〕再给旧那条 +1
+//      权重按字面相似度继承（≥60% 取 max +1），旧的新的都留着
 const t1 = new Date('2026-10-28T14:20:00+08:00').getTime()
 const t2 = new Date('2026-10-28T16:06:00+08:00').getTime()
 assert.ok(similarity('记忆格式改成这轮的总结', '记忆格式改成这轮对话的总结') >= 0.8, '这条字面很像')
