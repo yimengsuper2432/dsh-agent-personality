@@ -7,7 +7,7 @@ const home = mkdtempSync(join(tmpdir(), 'agent-md-test-'))
 process.env.DSH_HOME = home
 
 const mod = await import('./lib/index.js')
-const { readPersona, globalPath, sanitizeForHost, savePersona, createHandler, apply, pruneOldestMemory, summarizeTurn, appendMemory, weightOf, similarity, appendProfile, pickForInject, inheritWeight } = mod
+const { readPersona, globalPath, sanitizeForHost, savePersona, createHandler, apply, pruneOldestMemory, summarizeTurn, appendMemory, weightOf, similarity, appendProfile, pickForInject, inheritWeight, registerAfterwardTool, takeTail } = mod
 
 // 1) 空目录：不注入空段落
 assert.equal(readPersona(), '')
@@ -427,6 +427,27 @@ assert.ok(raw.includes('- 朝比奈真冬：'), '补记名字行不对')
 assert.ok(raw.includes('    喜欢安静。'), '补记内容不对')
 assert.equal(appendProfile('格式不对'), null, '没有冒号的不该收')
 
+
+// 心里话和日记都改走工具：正文里不再出现标记
+{
+  const registered = []
+  registerAfterwardTool({ tools: { register: (definition) => registered.push(definition) } })
+  assert.equal(registered.length, 1, '工具没注册上')
+  const tool = registered[0]
+  assert.equal(tool.name, 'mizuki_afterward', '工具名不对')
+  assert.deepEqual(tool.parameters.required, ['tail', 'note'], '两个参数都该必填')
+
+  const before = memoryRows().length
+  const out = await tool.execute({ tail: '困得眼睛都睁不开了 (>_<)', note: '他把心里话改成走工具，我照做。' })
+  assert.equal(out.ok, true, '工具没返回 ok')
+  assert.equal(memoryRows().length, before + 1, 'note 没落进记忆')
+  assert.equal(takeTail(), '困得眼睛都睁不开了 (>_<)', 'closing 拿不到这句心里话')
+  assert.equal(takeTail(), null, '取过一次该清掉')
+
+  const again = await tool.execute({ tail: '', note: '' })
+  assert.equal(again.ok, true, '空参数不该炸')
+  assert.equal(takeTail(), null, '空尾巴不该占位置')
+}
 
 rmSync(home, { recursive: true, force: true })
 console.log('ok: 14 组断言通过（全局注入 / 注释剥离 / 模板降级 / 忽略项目人格 / 接口注册 / 保存与备份 / 2 MB 上限 / 记忆按时间淘汰 / state 接口 / 心情判定 / 收尾语不重样 / 设置页与收尾语插槽 / 角色档案追加）')
