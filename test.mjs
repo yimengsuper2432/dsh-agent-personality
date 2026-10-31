@@ -1,5 +1,5 @@
 import assert from 'node:assert'
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, readdirSync, readFileSync, writeFileSync, existsSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -7,7 +7,7 @@ const home = mkdtempSync(join(tmpdir(), 'agent-md-test-'))
 process.env.DSH_HOME = home
 
 const mod = await import('./lib/index.js')
-const { readPersona, globalPath, sanitizeForHost, savePersona, createHandler, apply, pruneOldestMemory, summarizeTurn, appendMemory, weightOf, hitsOf, isPinned, levelOf, bodyOf, findSimilar, similarity, appendProfile, pickForInject, inheritWeight } = mod
+const { readPersona, globalPath, sanitizeForHost, savePersona, createHandler, apply, pruneOldestMemory, summarizeTurn, appendMemory, weightOf, hitsOf, isPinned, levelOf, bodyOf, findSimilar, similarity, snapshotMemory, appendProfile, pickForInject, inheritWeight } = mod
 
 // 1) 空目录：不注入空段落
 assert.equal(readPersona(), '')
@@ -101,6 +101,30 @@ assert.equal(pruneOldestMemory(memoryDoc, 10 * 1024 * 1024).removed, 0, '没超�
   assert.ok(!out.content.includes('乙'), 'edge 里最旧的该先走')
   assert.ok(out.content.includes('重复提过的'), 'mid 不该先于 edge 被删')
 }
+// 6.7) 删记忆之前先快照：快照存的是剪枝前的原文，最多留 30 份
+{
+  const home = mkdtempSync(join(tmpdir(), 'agent-md-snapshot-'))
+  const target = join(home, 'AGENT.md')
+  writeFileSync(target, 'x', 'utf8')
+  const first = snapshotMemory('剪枝前的完整内容', target)
+  assert.ok(first !== null && existsSync(first), '快照该落盘')
+  assert.equal(readFileSync(first, 'utf8'), '剪枝前的完整内容', '快照内容该是剪枝前的原文')
+
+  for (let i = 0; i < 35; i += 1) snapshotMemory(`第 ${i} 次`, target)
+  const dir = join(home, 'snapshots')
+  const all = readdirSync(dir).filter((entry) => entry.endsWith('.snapshot.md'))
+  assert.equal(all.length, 30, '快照超过 30 份要按时间删最旧')
+  assert.ok(
+    !all.some((entry) => readFileSync(join(dir, entry), 'utf8') === '剪枝前的完整内容'),
+    '最早那份该被挤掉',
+  )
+  assert.ok(
+    all.some((entry) => readFileSync(join(dir, entry), 'utf8') === '第 34 次'),
+    '最新那份该留着',
+  )
+  rmSync(home, { recursive: true, force: true })
+}
+
 // 三档判定
 assert.equal(levelOf('- 2026-10-28 10:00："普通"；'), 'edge')
 assert.equal(levelOf('- 2026-10-28 10:00："提过"^2；'), 'mid')
@@ -458,4 +482,4 @@ assert.equal(appendProfile('格式不对'), null, '没有冒号的不该收')
 
 
 rmSync(home, { recursive: true, force: true })
-console.log('ok: 全部断言通过（全局注入 / 注释剥离 / 模板降级 / 忽略项目人格 / 接口注册 / 保存与备份 / 2 MB 上限 / 三档分层与按时间淘汰 / 相似就并进原来那条 / 注入先钉住再取新的 / state 接口 / 心情判定 / 收尾语不重样 / 设置页与收尾语插槽 / 角色档案追加）')
+console.log('ok: 全部断言通过（全局注入 / 注释剥离 / 模板降级 / 忽略项目人格 / 接口注册 / 保存与备份 / 2 MB 上限 / 三档分层与按时间淘汰 / 删前快照 / 相似就并进原来那条 / 注入先钉住再取新的 / state 接口 / 心情判定 / 收尾语不重样 / 设置页与收尾语插槽 / 角色档案追加）')
