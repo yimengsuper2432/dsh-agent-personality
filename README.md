@@ -4,8 +4,8 @@
 
 **一份 AGENT.md，让整个 DeepSeek Harness 都是同一个人**
 
-[![Version](https://img.shields.io/badge/version-0.6.0-blue.svg)](https://github.com/wwsmiler1-bit/dsh-agent-md)
-[![dsh](https://img.shields.io/badge/dsh-plugin-informational.svg)](https://github.com/wwsmiler1-bit/dsh-agent-md)
+[![Version](https://img.shields.io/badge/version-0.6.0-blue.svg)](https://github.com/yimengsuper2432/dsh-agent-md)
+[![dsh](https://img.shields.io/badge/dsh-plugin-informational.svg)](https://github.com/yimengsuper2432/dsh-agent-md)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
 
 </div>
@@ -92,7 +92,7 @@ client 半（`conversation.chat.turnTail`，order 11）从页面里把那句摘�
 ## 安装
 
 ```powershell
-dsh plugin add github:wwsmiler1-bit/dsh-agent-md
+dsh plugin add github:yimengsuper2432/dsh-agent-md
 ```
 
 本地开发时也可以用 link 装进 profile（`dependencies` 与 `dsh.profile.bundles` 都要有一行）。

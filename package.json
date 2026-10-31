@@ -3,7 +3,7 @@
   "version": "0.6.0",
   "private": true,
   "type": "module",
-  "description": "全局 AGENT.md 人格：注入系统提示 + 设置里一个只编辑全局人格的页面（无项目人格）。",
+  "description": "把 AGENT.md 注入系统提示，并在设置里提供一个只编辑它的页面。",
   "keywords": [
     "deepseek",
     "deepseek-harness",
@@ -40,11 +40,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/wwsmiler1-bit/dsh-agent-md.git"
+    "url": "git+https://github.com/yimengsuper2432/dsh-agent-md.git"
   },
-  "homepage": "https://github.com/wwsmiler1-bit/dsh-agent-md",
+  "homepage": "https://github.com/yimengsuper2432/dsh-agent-md",
   "bugs": {
-    "url": "https://github.com/wwsmiler1-bit/dsh-agent-md/issues"
+    "url": "https://github.com/yimengsuper2432/dsh-agent-md/issues"
   },
   "license": "MIT"
 }
