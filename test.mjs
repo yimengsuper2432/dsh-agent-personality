@@ -7,7 +7,7 @@ const home = mkdtempSync(join(tmpdir(), 'virtual-person-test-'))
 process.env.DSH_HOME = home
 
 const mod = await import('./lib/index.js')
-const { readPersona, globalPath, sanitizeForHost, savePersona, createHandler, apply, pruneOldestMemory, summarizeTurn, appendMemory, hitsOf, isPinned, levelOf, bodyOf, findSimilar, similarity, snapshotMemory, pickForInject } = mod
+const { readPersona, globalPath, sanitizeForHost, savePersona, createHandler, apply, pruneOldestMemory, summarizeTurn, appendMemory, hitsOf, isPinned, levelOf, bodyOf, findSimilar, similarity, snapshotMemory, pickForInject, regroupMemory } = mod
 
 // 1) 空目录：不注入空段落
 assert.equal(readPersona(), '')
@@ -238,6 +238,42 @@ assert.equal(memoryRows().length, 2)
   assert.ok(pickForInject(all, 1e9).split('\n').filter((l) => l.startsWith('- 20')).length === rows.length, '预算够就一条不丢')
 }
 
+// 记忆按档位分节摆：钉住的一节、反复提过的一节、其余的一节；档位变了要自己换节
+{
+  const sample = [
+    '# 人设',
+    '',
+    '## 记忆',
+    '',
+    '记忆说明放这里，别看漏了。',
+    '',
+    '- 2026-01-01 00:00："新写的一条"；',
+    '- 2025-01-01 00:00："老的一条，被提过好几次"^5；',
+    '- 2024-01-01 00:00："钉住的那条"*；',
+    '',
+  ].join('\n')
+  const grouped = regroupMemory(sample)
+  assert.ok(grouped.includes('### 钉住的（永不淘汰）'), '钉住的那节没出来')
+  assert.ok(grouped.includes('### 反复提过的'), '反复提过的那节没出来')
+  assert.ok(grouped.includes('### 其余的'), '其余的那节没出来')
+  assert.ok(grouped.includes('记忆说明放这里，别看漏了。'), '说明文字被吃了')
+  const at = (needle) => grouped.indexOf(needle)
+  assert.ok(at('### 钉住的（永不淘汰）') < at('### 反复提过的'), '钉住的该排最前')
+  assert.ok(at('### 反复提过的') < at('### 其余的'), '反复提过的该在其余的上面')
+  assert.equal(
+    grouped.split('\n').filter((line) => line.startsWith('- 20')).length,
+    3,
+    '分节把记忆行弄丢了',
+  )
+  assert.equal(regroupMemory(grouped), grouped, '重排一次和重排两次该一模一样')
+
+  // 从 edge 长成 mid 的那条，下一次重排要挪到「反复提过的」里去
+  const grown = regroupMemory(sample.replace('"新写的一条"；', '"新写的一条"^2；'))
+  const midChunk = grown.slice(grown.indexOf('### 反复提过的'), grown.indexOf('### 其余的'))
+  assert.ok(midChunk.includes('新写的一条'), '长成 mid 的还赖在其余那节')
+  assert.ok(!grown.slice(grown.indexOf('### 其余的')).includes('新写的一条'), '两节里都留了一份')
+}
+
 // 相似度只用来判「是不是同一件事」：不累加、也不封顶
 {
   const base = '## 记忆\n\n- 2026-01-01 00:00："遥那张卡面翻出来看了半天，浅蓝头发白蝴蝶结"^7；\n'
@@ -433,4 +469,4 @@ const tail = slots.filter((m) => m.name === 'conversation.chat.turnTail')[0]
 assert.equal(tail.order, 11, '收尾语要排在费用行（order 10）之后')
 
 rmSync(home, { recursive: true, force: true })
-console.log('ok: 全部断言通过（全局注入 / 注释剥离 / 模板降级 / 忽略项目人格 / 接口注册 / 保存与备份 / 2 MB 上限 / 三档分层与按时间淘汰 / 删前快照 / 相似就并进原来那条 / 注入按字符预算挑且钉住优先 / state 接口 / 心情判定 / 收尾语不重样 / 设置页与收尾语插槽）')
+console.log('ok: 全部断言通过（全局注入 / 注释剥离 / 模板降级 / 忽略项目人格 / 接口注册 / 保存与备份 / 2 MB 上限 / 三档分层与按时间淘汰 / 删前快照 / 相似就并进原来那条 / 注入按字符预算挑且钉住优先 / 记忆按档位分节 / state 接口 / 心情判定 / 收尾语不重样 / 设置页与收尾语插槽）')

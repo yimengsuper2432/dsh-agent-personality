@@ -4,7 +4,7 @@
 
 **一份 AGENT.md，让整个 DeepSeek Harness 都是同一个人**
 
-[![Version](https://img.shields.io/badge/version-0.7.0-blue.svg)](https://github.com/yimengsuper2432/dsh-virtual-person)
+[![Version](https://img.shields.io/badge/version-0.7.1-blue.svg)](https://github.com/yimengsuper2432/dsh-virtual-person)
 [![dsh](https://img.shields.io/badge/dsh-plugin-informational.svg)](https://github.com/yimengsuper2432/dsh-virtual-person)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
 
@@ -46,13 +46,25 @@
 
 `〔记〕` 没来时，先用会话事件里用户真打的那句垫一行，等 `〔记〕` 到了原地替换，同一轮不会记两遍。
 
-### 4. 忘之前先快照
+### 4. 记忆按档位分节摆
+
+`## 记忆` 底下不是一长串流水账，写完会按当前档位重新分到三节里：
+
+| 小节 | 谁在这一节 | 排序 |
+| :--- | :--- | :--- |
+| `### 钉住的（永不淘汰）` | 行尾带 `*` 的 | 时间新的在前 |
+| `### 反复提过的` | `^N`，N ≥ 1 | 命中次数多的在前，同次数看时间 |
+| `### 其余的` | 一次都没被提过的 | 时间新的在前 |
+
+档位是每次写完**算出来**的，不是写死的——某条从 `edge` 长成 `mid`，下一次写入就自己挪到上面那节去；钉住了也一样。某一档空着就不出那一节。要重排整份文件，把内容喂给导出的 `regroupMemory()` 就行（它是纯函数，不碰磁盘）。
+
+### 5. 忘之前先快照
 
 到 2 MB 上限时才会忘：删掉 20%、留 80%，从最久没被提起的那批挑，行尾标 `*` 的一条都不动。
 
 删是不可逆的，所以删之前先存一份完整副本到同目录的 `snapshots/`，文件名带时间戳，只留最近 30 份。删错了、或者想找回某句很久以前的话，翻那里。
 
-### 5. 收尾语每轮现想，不念词库
+### 6. 收尾语每轮现想，不念词库
 
 收尾语长在「本轮费用」右边那行灰字里，由她**每轮现场写**：表面的话和内心的想法分开想、互不推导。闲聊时两条都写（正文 + `〔尾〕`），干活时只写心里那条，只有一件事值得说时就只写一条。
 
