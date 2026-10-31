@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, readdirSync, readFileSync, writeFileSync, exist
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-const home = mkdtempSync(join(tmpdir(), 'agent-md-test-'))
+const home = mkdtempSync(join(tmpdir(), 'virtual-person-test-'))
 process.env.DSH_HOME = home
 
 const mod = await import('./lib/index.js')
@@ -52,7 +52,7 @@ const ctx = {
   },
 }
 apply(ctx)
-assert.deepEqual(routes.map((r) => [r.kind, r.path]), [['prefix', '/api/agent-md']], '设置页接口没注册')
+assert.deepEqual(routes.map((r) => [r.kind, r.path]), [['prefix', '/api/virtual-person']], '设置页接口没注册')
 
 // 5) 花括号降级是纯函数
 assert.equal(sanitizeForHost('a{{{b}}'), 'a{b}}')
@@ -103,7 +103,7 @@ assert.equal(pruneOldestMemory(memoryDoc, 10 * 1024 * 1024).removed, 0, '没超�
 }
 // 6.7) 删记忆之前先快照：快照存的是剪枝前的原文，最多留 30 份
 {
-  const home = mkdtempSync(join(tmpdir(), 'agent-md-snapshot-'))
+  const home = mkdtempSync(join(tmpdir(), 'virtual-person-snapshot-'))
   const target = join(home, 'AGENT.md')
   writeFileSync(target, 'x', 'utf8')
   const first = snapshotMemory('剪枝前的完整内容', target)
@@ -277,10 +277,10 @@ const memHandler = createHandler({
 writeFileSync(globalPath(), '# 人设\n\n正文。\n', 'utf8')
 const memoryLines = () => readFileSync(globalPath(), 'utf8').trim().split('\n').filter((l) => l.startsWith('- 2026-')).length
 const beforeClosing = memoryLines()
-const closingRes = await hit(memHandler, { url: '/api/agent-md/closing?session=mem-test&seq=1', method: 'GET', on() {}, destroy() {} })
+const closingRes = await hit(memHandler, { url: '/api/virtual-person/closing?session=mem-test&seq=1', method: 'GET', on() {}, destroy() {} })
 assert.equal(closingRes.status, 200)
 const afterFirst = memoryLines()
-const repeatRes = await hit(memHandler, { url: '/api/agent-md/closing?session=mem-test&seq=1', method: 'GET', on() {}, destroy() {} })
+const repeatRes = await hit(memHandler, { url: '/api/virtual-person/closing?session=mem-test&seq=1', method: 'GET', on() {}, destroy() {} })
 assert.equal(memoryLines(), afterFirst, '同一轮重复记了')
 assert.equal(repeatRes.body.text, closingRes.body.text, '同一个 seq 的灰字每请求一次就换一句')
 assert.equal(afterFirst, beforeClosing + 1, '记忆条数不对')
@@ -290,7 +290,7 @@ const { Readable } = await import('node:stream')
 const noteBody = JSON.stringify({ session: 'mem-test', seq: 1, text: '把记忆格式改成她写总结，宿主只落盘' })
 const noteStream = Readable.from([Buffer.from(noteBody, 'utf8')])
 const noteRes = await hit(memHandler, {
-  url: '/api/agent-md/memory',
+  url: '/api/virtual-person/memory',
   method: 'POST',
   on: noteStream.on.bind(noteStream),
   destroy() {},
@@ -308,7 +308,7 @@ const enBody = JSON.stringify({
 })
 const enStream = Readable.from([Buffer.from(enBody, 'utf8')])
 const enRes = await hit(memHandler, {
-  url: '/api/agent-md/memory',
+  url: '/api/virtual-person/memory',
   method: 'POST',
   on: enStream.on.bind(enStream),
   destroy() {},
@@ -332,12 +332,12 @@ async function call(req) {
   await handler(req, res)
   return result
 }
-const stateRes = await call({ url: '/api/agent-md/state', method: 'GET', on() {}, destroy() {} })
+const stateRes = await call({ url: '/api/virtual-person/state', method: 'GET', on() {}, destroy() {} })
 assert.equal(stateRes.status, 200)
 assert.equal(stateRes.body.content, '# 新版人格\n')
 assert.equal(stateRes.body.chars, 7)
 
-const missing = await call({ url: '/api/agent-md/nope', method: 'GET', on() {}, destroy() {} })
+const missing = await call({ url: '/api/virtual-person/nope', method: 'GET', on() {}, destroy() {} })
 assert.equal(missing.status, 404)
 
 // 8) 心情：宿主自己算，不顺着用户
@@ -397,7 +397,7 @@ const sandbox = {
 }
 sandbox.globalThis = sandbox
 vm.runInNewContext(source, sandbox)
-assert.equal(loaded.id, 'dsh-agent-md')
+assert.equal(loaded.id, 'dsh-virtual-person')
 const clientExports = loaded.factory((name) => {
   assert.equal(name, 'react')
   return fakeReact
@@ -425,7 +425,7 @@ clientExports.apply({
 })
 assert.deepEqual(injected.sort(), ['conversation.chat.turnTail', 'settings.section'], '插了两个槽')
 const settings = slots.filter((m) => m.name === 'settings.section')[0]
-assert.equal(settings.id, 'agent-md')
+assert.equal(settings.id, 'virtual-person')
 assert.equal(typeof settings.label, 'function')
 const tail = slots.filter((m) => m.name === 'conversation.chat.turnTail')[0]
 assert.equal(tail.order, 11, '收尾语要排在费用行（order 10）之后')

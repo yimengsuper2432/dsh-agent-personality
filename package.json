@@ -1,5 +1,5 @@
 {
-  "name": "dsh-agent-md",
+  "name": "dsh-virtual-person",
   "version": "0.6.0",
   "private": true,
   "type": "module",
@@ -11,7 +11,7 @@
     "dsh-plugin",
     "agent",
     "persona",
-    "agent-md"
+    "virtual-person"
   ],
   "main": "lib/index.js",
   "exports": {
@@ -40,11 +40,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/yimengsuper2432/dsh-agent-md.git"
+    "url": "git+https://github.com/yimengsuper2432/dsh-virtual-person.git"
   },
-  "homepage": "https://github.com/yimengsuper2432/dsh-agent-md",
+  "homepage": "https://github.com/yimengsuper2432/dsh-virtual-person",
   "bugs": {
-    "url": "https://github.com/yimengsuper2432/dsh-agent-md/issues"
+    "url": "https://github.com/yimengsuper2432/dsh-virtual-person/issues"
   },
   "license": "MIT"
 }

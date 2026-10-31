@@ -1,16 +1,16 @@
 <div align="center">
 
-# dsh-agent-md
+# dsh-virtual-person
 
 **一份 AGENT.md，让整个 DeepSeek Harness 都是同一个人**
 
-[![Version](https://img.shields.io/badge/version-0.6.0-blue.svg)](https://github.com/yimengsuper2432/dsh-agent-md)
-[![dsh](https://img.shields.io/badge/dsh-plugin-informational.svg)](https://github.com/yimengsuper2432/dsh-agent-md)
+[![Version](https://img.shields.io/badge/version-0.6.0-blue.svg)](https://github.com/yimengsuper2432/dsh-virtual-person)
+[![dsh](https://img.shields.io/badge/dsh-plugin-informational.svg)](https://github.com/yimengsuper2432/dsh-virtual-person)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
 
 </div>
 
-`dsh-agent-md` 把 `<DSH_HOME>/AGENT.md` 整份读进 DSH 的系统提示词，于是你在任何会话里打开的都是同一个角色，不用每个项目各写一遍。它不另开聊天窗口，也不挑模型：人格进系统提示，记忆写在磁盘上的同一个文件里，设置里只有一个页面，用来编辑这一份人格。
+`dsh-virtual-person` 把 `<DSH_HOME>/AGENT.md` 整份读进 DSH 的系统提示词，于是你在任何会话里打开的都是同一个角色，不用每个项目各写一遍。它不另开聊天窗口，也不挑模型：人格进系统提示，记忆写在磁盘上的同一个文件里，设置里只有一个页面，用来编辑这一份人格。
 
 它适合这样的用法：你有一个想长期相处的角色，希望她记得住前几天说过的事，也希望「记得」这件事不需要你手动维护——没有需要定期收拾的索引，没有要你打分的权重，只有一份能直接用编辑器打开的 Markdown。
 
@@ -28,7 +28,7 @@
 
 ### 2. 设置里只有一个页面，只改这一份
 
-设置 → **虚拟记忆**：头部是标题和说明，下面一条生效横幅告诉你本会话生效的是哪份文件、多少字，右侧是「文本占用 / 2 MB」进度条和连接状态；再往下是文件条（路径 + 上次改动）、正文、保存 / 打开原文件 / 重新载入。
+设置 → **虚拟人物**：头部是标题和说明，下面一条生效横幅告诉你本会话生效的是哪份文件、多少字，右侧是「文本占用 / 2 MB」进度条和连接状态；再往下是文件条（路径 + 上次改动）、正文、保存 / 打开原文件 / 重新载入。
 
 没有项目人格、没有第二份卡、没有要你挑的模板。**一个页面 = 一份文件。**
 
@@ -92,7 +92,7 @@ client 半（`conversation.chat.turnTail`，order 11）从页面里把那句摘�
 ## 安装
 
 ```powershell
-dsh plugin add github:yimengsuper2432/dsh-agent-md
+dsh plugin add github:yimengsuper2432/dsh-virtual-person
 ```
 
 本地开发时也可以用 link 装进 profile（`dependencies` 与 `dsh.profile.bundles` 都要有一行）。
@@ -114,11 +114,11 @@ Host 侧改动要重启 DSH（比如注入内容、路由）；只改 `lib/clien
 
 | 方法 | 路径 | 作用 |
 | :--- | :--- | :--- |
-| GET | `/api/agent-md/state` | 路径、是否存在、上次改动、字数、正文 |
-| GET | `/api/agent-md/closing?session=` | 本轮收尾语（按会话 + 轮次号缓存，同一轮不重挑） |
-| POST | `/api/agent-md/memory` | 写一条记忆（时间戳由宿主补，同一件事并进原行） |
-| POST | `/api/agent-md/save` | 写入人格（备份 + 原子写，上限 2 MB，超了 413） |
-| POST | `/api/agent-md/open` | 在资源管理器里定位文件或目录 |
+| GET | `/api/virtual-person/state` | 路径、是否存在、上次改动、字数、正文 |
+| GET | `/api/virtual-person/closing?session=` | 本轮收尾语（按会话 + 轮次号缓存，同一轮不重挑） |
+| POST | `/api/virtual-person/memory` | 写一条记忆（时间戳由宿主补，同一件事并进原行） |
+| POST | `/api/virtual-person/save` | 写入人格（备份 + 原子写，上限 2 MB，超了 413） |
+| POST | `/api/virtual-person/open` | 在资源管理器里定位文件或目录 |
 
 ## 自检
 
