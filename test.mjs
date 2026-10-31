@@ -7,7 +7,7 @@ const home = mkdtempSync(join(tmpdir(), 'agent-md-test-'))
 process.env.DSH_HOME = home
 
 const mod = await import('./lib/index.js')
-const { readPersona, globalPath, sanitizeForHost, savePersona, createHandler, apply, pruneOldestMemory, summarizeTurn, appendMemory, weightOf, similarity, appendProfile, pickForInject, inheritWeight } = mod
+const { readPersona, globalPath, sanitizeForHost, savePersona, createHandler, apply, pruneOldestMemory, summarizeTurn, appendMemory, weightOf, hitsOf, isPinned, levelOf, bodyOf, findSimilar, similarity, appendProfile, pickForInject, inheritWeight } = mod
 
 // 1) 空目录：不注入空段落
 assert.equal(readPersona(), '')
@@ -69,30 +69,54 @@ await assert.rejects(
 )
 assert.equal(readFileSync(globalPath(), 'utf8'), '# 新版人格\n')
 
-// 6.6) 超过上限先删权重最低的，同权重删最旧的；正文和没时间戳的内容都不动
+// 6.6) 超过上限先删 edge 里最旧的，edge 不够才动 mid；钉住的 core 一条都不碰
 const filler = 'x'.repeat(300)
 const memoryDoc = [
   '# 人设',
   '正文不该被删。',
-  '- 2026-10-20 09:00 最旧的一条记忆 ' + filler + ' + Weight=1',
-  '- 2026-10-26 22:10 中间的一条记忆 ' + filler + ' + Weight=1',
-  '- 2026-10-21 08:00 权重高的老记忆 ' + filler + ' + Weight=3',
+  '- 2026-10-20 09:00："最旧的一条记忆' + filler + '"；',
+  '- 2026-10-26 22:10："中间的一条记忆' + filler + '"；',
+  '- 2026-10-21 08:00："钉住的老记忆' + filler + '"*；',
   '结尾说明也不该被删。',
 ].join('\n')
 const pruned = pruneOldestMemory(memoryDoc, 500)
-// 到上限就砍 20%：3 条 → 至少砍 1 条，权重最低的先走
-assert.equal(pruned.removed, 1, '应该按 20% 砍掉权重最低的那条')
-assert.ok(!pruned.content.includes('最旧的一条'), '最低权重的没删')
-assert.ok(pruned.content.includes('中间的一条'), '只砍 20%，第二条该留着')
-assert.ok(pruned.content.includes('权重高的老记忆'), '高权重的不该先删')
+// 到上限就砍 20%：3 条 → 至少砍 1 条，edge 里最旧的那条先走
+assert.equal(pruned.removed, 1, '应该按 20% 砍掉 1 条')
+assert.ok(!pruned.content.includes('最旧的一条记忆'), '最旧的 edge 没删')
+assert.ok(pruned.content.includes('中间的一条记忆'), '只砍 20%，第二条该留着')
+assert.ok(pruned.content.includes('钉住的老记忆'), 'core 不该被删')
 assert.ok(pruned.content.includes('正文不该被删'), '正文被误删')
 assert.ok(pruned.content.includes('结尾说明也不该被删'), '结尾被误删')
 assert.equal(pruneOldestMemory(memoryDoc, 10 * 1024 * 1024).removed, 0, '没超上限不该动')
-// 权重一样时才看时间
-const sameWeight = ['- 2026-10-26 22:10 乙 ' + filler, '- 2026-10-20 09:00 甲 ' + filler].join('\n')
-const samePruned = pruneOldestMemory(sameWeight, 400)
-assert.ok(samePruned.content.includes('乙') && !samePruned.content.includes('甲'), '同权重应按时间删旧的')
-// 权重解析：没写当 1
+// mid 排在 edge 后面：只要还有 edge，就轮不到 mid 先走
+{
+  const mixed = [
+    '- 2026-10-20 09:00："重复提过的' + filler + '"^3；',
+    '- 2026-10-21 09:00："乙' + filler + '"；',
+    '- 2026-10-22 09:00："丙' + filler + '"；',
+    '- 2026-10-23 09:00："丁' + filler + '"；',
+    '- 2026-10-24 09:00："戊' + filler + '"；',
+  ].join('\n')
+  const out = pruneOldestMemory(mixed, 700)
+  assert.ok(!out.content.includes('乙'), 'edge 里最旧的该先走')
+  assert.ok(out.content.includes('重复提过的'), 'mid 不该先于 edge 被删')
+}
+// 三档判定
+assert.equal(levelOf('- 2026-10-28 10:00："普通"；'), 'edge')
+assert.equal(levelOf('- 2026-10-28 10:00："提过"^2；'), 'mid')
+assert.equal(levelOf('- 2026-10-28 10:00："钉住"*；'), 'core')
+assert.equal(levelOf('- 2026-10-28 10:00："老权重"Weight=4；'), 'mid', '老格式按 Weight>1 算 mid')
+assert.equal(hitsOf('- 2026-10-28 10:00："没提过"；'), 0)
+assert.equal(hitsOf('- 2026-10-28 10:00："提过"^3；'), 3)
+assert.equal(hitsOf('- 2026-10-28 10:00："老权重"Weight=4；'), 3, '老 Weight 换算成命中次数')
+assert.equal(isPinned('- 2026-10-28 10:00："钉住"*；'), true)
+assert.equal(isPinned('- 2026-10-28 10:00："钉住还提过"^2*；'), true)
+assert.equal(isPinned('- 2026-10-28 10:00："普通"；'), false)
+// 正文：新老尾巴都要剥干净
+assert.equal(bodyOf('- 2026-10-28 10:00："内容"^2；'), '内容')
+assert.equal(bodyOf('- 2026-10-28 10:00："内容"*；'), '内容')
+assert.equal(bodyOf('- 2026-10-28 10:00："内容"Weight=5；'), '内容')
+// 老格式还能读（只读不写）
 assert.equal(weightOf('- 2026-10-28 10:00 没写权重'), 1)
 assert.equal(weightOf('- 2026-10-28 10:00：`"写了`"Weight=4；'), 4)
 
@@ -139,66 +163,68 @@ assert.equal(
 assert.equal(markValueOf('〔记〕English only summary', NOTE), 'English only summary', '英文照样记')
 
 writeFileSync(globalPath(), '# 人设\n\n正文。\n', 'utf8')
+const memoryRows = () => readFileSync(globalPath(), 'utf8').split('\n').filter((l) => l.startsWith('- 2026-'))
 const line1 = appendMemory('记忆格式改成这轮的总结', new Date('2026-10-28T14:20:00+08:00').getTime())
-assert.equal(line1, '- 2026-10-28 14:20："记忆格式改成这轮的总结"Weight=1；')
+assert.equal(line1, '- 2026-10-28 14:20："记忆格式改成这轮的总结"；')
 const written = readFileSync(globalPath(), 'utf8')
 assert.ok(written.includes('## 记忆'), '没有自动补出「## 记忆」一节')
 assert.ok(written.includes('正文。'), '正文被动了')
 assert.ok(written.includes(line1 ?? ''), '记忆没写进文件')
 
-// 6.8) 同一件事再提也不合并：旧的留着、新的另起一条，
-//      权重按字面相似度继承（≥60% 取 max +1），旧的新的都留着
-const t1 = new Date('2026-10-28T14:20:00+08:00').getTime()
+// 6.8) 同一件事再提不另起一行：并进旧那条，时间刷成现在、命中次数加一
 const t2 = new Date('2026-10-28T16:06:00+08:00').getTime()
 assert.ok(similarity('记忆格式改成这轮的总结', '记忆格式改成这轮对话的总结') >= 0.8, '这条字面很像')
 const added = appendMemory('记忆格式改成这轮对话的总结', t2)
-assert.equal(added, '- 2026-10-28 16:06："记忆格式改成这轮对话的总结"Weight=2；')
-const memoryRows = () => readFileSync(globalPath(), 'utf8').split('\n').filter((l) => l.startsWith('- 2026-'))
-assert.equal(memoryRows().length, 2, '再像也留两条，不再合并')
-assert.equal(memoryRows()[1], added, '新的按相似度继承成 Weight=2')
+assert.equal(added, '- 2026-10-28 16:06："记忆格式改成这轮对话的总结"^1；')
+assert.equal(memoryRows().length, 1, '同一件事不该攒出第二行')
+assert.equal(memoryRows()[0], added, '旧那条被就地改写')
+assert.equal(levelOf(added), 'mid', '提过一次就升到 mid')
 
-// 链式：第三条同样像 → 取前两条里大的那个 +1 = 3
+// 再提一次 → 命中次数接着涨，还是那一条
 const third = appendMemory('记忆格式改成这轮对话里的总结', new Date('2026-10-28T17:00:00+08:00').getTime())
-assert.ok(String(third).endsWith('Weight=3；'), '第三条接上涨到 3')
-assert.equal(memoryRows().length, 3, '三条各留各的，一条都没并掉')
-// 完全不像的一条照常从 1 起
+assert.ok(String(third).includes('^2；'), '第三条应该把它顶到 ^2')
+assert.equal(memoryRows().length, 1, '还是只有一条')
+// 完全不像的一条照常另起一行，从 edge 起
 const fresh = appendMemory('他今天带了把蓝格子伞', new Date('2026-10-28T18:00:00+08:00').getTime())
-assert.ok(String(fresh).endsWith('Weight=1；'), '不像的就是 1')
-assert.equal(memoryRows().length, 4)
+assert.equal(fresh, '- 2026-10-28 18:00："他今天带了把蓝格子伞"；')
+assert.equal(levelOf(fresh), 'edge', '新写的一条是 edge')
+assert.equal(memoryRows().length, 2)
 
 
-// 注入只挑权重最高的一批，最多 200 条；没挑中的还在文件里
+// 注入：钉住的先占名额，其余按时间从新到旧；最多 200 条，没挑中的还在文件里
 {
   const rows = []
   for (let i = 0; i < 205; i += 1) {
+    const hh = String(Math.floor(i / 60)).padStart(2, '0')
     const mm = String(i % 60).padStart(2, '0')
-    rows.push(`- 2026-01-01 00:${mm}："第${i}条"Weight=1；`)
+    rows.push(`- 2026-01-01 ${hh}:${mm}："第${i}条"；`)
   }
-  rows[3] = '- 2026-01-01 02:00："最要紧的那条"Weight=8；'
+  rows[3] = '- 2025-01-01 02:00："钉住的老记忆"*；'
   const picked = pickForInject(['## 记忆', '', ...rows].join('\n'))
-  const kept = picked.split('\n').filter((l) => l.startsWith('- 2026-'))
+  const kept = picked.split('\n').filter((l) => l.startsWith('- 20'))
   assert.equal(kept.length, 200, '只摆 200 条')
-  assert.ok(picked.includes('最要紧的那条'), '权重高的一定留下')
-  assert.ok(!picked.includes('第0条'), '权重低的被挤掉')
+  assert.ok(picked.includes('钉住的老记忆'), '钉住的一定留下')
+  assert.ok(!picked.includes('"第0条"'), '最旧的被挤掉')
+  assert.ok(picked.includes('"第204条"'), '最新的留下')
   assert.ok(picked.includes('## 记忆'), '小节标题不能被删')
   const order = kept.map((l) => rows.indexOf(l))
   assert.deepEqual(order, [...order].sort((a, b) => a - b), '挑完仍按原来的顺序摆')
 }
 
-// 权重不封顶：像一条 Weight=99 的，新的就是 100
+// 相似度只用来判「是不是同一件事」：不累加、也不封顶
 {
-  const base = '## 记忆\n\n- 2026-01-01 00:00："遥那张卡面翻出来看了半天，浅蓝头发白蝴蝶结"Weight=99；\n'
-  assert.equal(
-    inheritWeight('遥那张卡面翻出来看了半天，浅蓝头发白蝴蝶结', base),
-    100,
-    '权重不该封顶',
-  )
+  const base = '## 记忆\n\n- 2026-01-01 00:00："遥那张卡面翻出来看了半天，浅蓝头发白蝴蝶结"^7；\n'
+  const hit = findSimilar('遥那张卡面翻出来看了半天，浅蓝头发白蝴蝶结', base)
+  assert.equal(hit?.index, 2, '该认出是同一件事')
+  assert.ok(hit.score > 0.9, '同一句相似度该很高')
+  assert.equal(findSimilar('他今天带了把蓝格子伞', base), null, '不像的不合并')
+  assert.equal(inheritWeight('遥那张卡面翻出来看了半天，浅蓝头发白蝴蝶结', base), 8, '再提一次就是 ^8')
 }
 
-// 不像的也新起一条，权重从 1 起
+// 不像的照常另起一行
 const unrelated = appendMemory('他要去上课了，把话头留着', t2)
-assert.equal(weightOf(unrelated), 1, '不像的那条从 1 起')
-assert.equal(memoryRows().length, 5, '每条都独立')
+assert.equal(hitsOf(unrelated), 0, '不像的那条没有命中标记')
+assert.ok(memoryRows().some((l) => l.includes('他要去上课了')), '不该并到别的行里去')
 
 // 日常追加不碰备份：.bak 只在真删掉两成那一刻才更新
 {
@@ -223,6 +249,8 @@ const memHandler = createHandler({
     ? { inspect: async () => ({ events: turnEvents }) }
     : undefined),
 })
+// 清成干净的一页：这里要证明的是「垫一句 +1、同一轮重复不 +1」，别被前面的残留搅了
+writeFileSync(globalPath(), '# 人设\n\n正文。\n', 'utf8')
 const memoryLines = () => readFileSync(globalPath(), 'utf8').trim().split('\n').filter((l) => l.startsWith('- 2026-')).length
 const beforeClosing = memoryLines()
 const closingRes = await hit(memHandler, { url: '/api/agent-md/closing?session=mem-test&seq=1', method: 'GET', on() {}, destroy() {} })
@@ -430,4 +458,4 @@ assert.equal(appendProfile('格式不对'), null, '没有冒号的不该收')
 
 
 rmSync(home, { recursive: true, force: true })
-console.log('ok: 14 组断言通过（全局注入 / 注释剥离 / 模板降级 / 忽略项目人格 / 接口注册 / 保存与备份 / 2 MB 上限 / 记忆按时间淘汰 / state 接口 / 心情判定 / 收尾语不重样 / 设置页与收尾语插槽 / 角色档案追加）')
+console.log('ok: 全部断言通过（全局注入 / 注释剥离 / 模板降级 / 忽略项目人格 / 接口注册 / 保存与备份 / 2 MB 上限 / 三档分层与按时间淘汰 / 相似就并进原来那条 / 注入先钉住再取新的 / state 接口 / 心情判定 / 收尾语不重样 / 设置页与收尾语插槽 / 角色档案追加）')
