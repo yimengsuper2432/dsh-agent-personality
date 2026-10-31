@@ -4,7 +4,7 @@
 
 **一份 AGENT.md，让整个 DeepSeek Harness 都是同一个人**
 
-[![Version](https://img.shields.io/badge/version-0.7.1-blue.svg)](https://github.com/yimengsuper2432/dsh-virtual-person)
+[![Version](https://img.shields.io/badge/version-0.7.2-blue.svg)](https://github.com/yimengsuper2432/dsh-virtual-person)
 [![dsh](https://img.shields.io/badge/dsh-plugin-informational.svg)](https://github.com/yimengsuper2432/dsh-virtual-person)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
 
@@ -24,7 +24,7 @@
 - `<!-- -->` 注释不会进上下文，可以拿来给自己写批注；
 - `{{x}}` 会自动降级成 `{x}`，不会被当成模板变量吞掉；
 - 空文件、只有注释 = 不注入任何内容；
-- 保存时先备份 `.bak`，再写临时文件后 rename，写一半断电不会留下空人格。
+- 保存时写临时文件再 rename，写一半断电不会留下空人格——但**不留任何备份副本**。
 
 ### 2. 设置里只有一个页面，只改这一份
 
@@ -58,11 +58,11 @@
 
 档位是每次写完**算出来**的，不是写死的——某条从 `edge` 长成 `mid`，下一次写入就自己挪到上面那节去；钉住了也一样。某一档空着就不出那一节。要重排整份文件，把内容喂给导出的 `regroupMemory()` 就行（它是纯函数，不碰磁盘）。
 
-### 5. 忘之前先快照
+### 5. 到上限才忘，删了就是删了
 
 到 2 MB 上限时才会忘：删掉 20%、留 80%，从最久没被提起的那批挑，行尾标 `*` 的一条都不动。
 
-删是不可逆的，所以删之前先存一份完整副本到同目录的 `snapshots/`，文件名带时间戳，只留最近 30 份。删错了、或者想找回某句很久以前的话，翻那里。
+**不做任何备份**：不写 `.bak`、不建 `snapshots/`。删掉的东西不会留副本，想留住哪条就给它标 `*` 钉死。
 
 ### 6. 收尾语每轮现想，不念词库
 
@@ -76,11 +76,10 @@ client 半（`conversation.chat.turnTail`，order 11）从页面里把那句摘�
 
 ```text
 <DSH_HOME>/
-├── AGENT.md                      # 人格 + 记忆，唯一真源
-├── AGENT.md.bak                  # 每次保存前的上一版
-└── snapshots/                    # 删记忆前的完整副本，留最近 30 份
-    └── AGENT.md.20261031-093400-0001.snapshot.md
+└── AGENT.md                      # 人格 + 记忆，唯一真源
 ```
+
+就这一个文件。不生成 `.bak`，不建 `snapshots/`，旁边不会多出任何东西。
 
 人格文件本身长这样：
 
@@ -108,7 +107,7 @@ dsh plugin add github:yimengsuper2432/dsh-virtual-person
 ## 开发
 
 ```text
-lib/index.js       # Host：注入系统提示、记忆写入与淘汰、快照、收尾语、HTTP API
+lib/index.js       # Host：注入系统提示、记忆写入与淘汰、收尾语、HTTP API
 lib/client.js      # Client：设置页 + turnTail 收尾语 + 步骤摘要隐藏
 cordis.patch.yml   # 插件在 bundle 里的挂载点
 test.mjs           # 自检
@@ -123,7 +122,7 @@ Host 侧改动要重启 DSH（比如注入内容、路由）；只改 `lib/clien
 | GET | `/api/virtual-person/state` | 路径、是否存在、上次改动、字数、正文 |
 | GET | `/api/virtual-person/closing?session=` | 本轮收尾语（按会话 + 轮次号缓存，同一轮不重挑） |
 | POST | `/api/virtual-person/memory` | 写一条记忆（时间戳由宿主补，同一件事并进原行） |
-| POST | `/api/virtual-person/save` | 写入人格（备份 + 原子写，上限 2 MB，超了 413） |
+| POST | `/api/virtual-person/save` | 写入人格（原子写、不备份，上限 2 MB，超了 413） |
 | POST | `/api/virtual-person/open` | 在资源管理器里定位文件或目录 |
 
 ## 自检
@@ -132,7 +131,7 @@ Host 侧改动要重启 DSH（比如注入内容、路由）；只改 `lib/clien
 node test.mjs
 ```
 
-一次跑完 16 组断言：全局注入、注释剥离、模板降级、忽略项目人格、接口注册、保存与备份、2 MB 上限、三档分层与按时间淘汰、删前快照、相似就并进原来那条、注入按字符预算挑且钉住优先、state 接口、心情判定、收尾语不重样、设置页与收尾语插槽。
+一次跑完 16 组断言：全局注入、注释剥离、模板降级、忽略项目人格、接口注册、保存不备份、2 MB 上限、三档分层与按时间淘汰、剪枝不留快照、相似就并进原来那条、注入按字符预算挑且钉住优先、记忆按档位分节、state 接口、心情判定、收尾语不重样、设置页与收尾语插槽。
 
 ## 已知边界
 

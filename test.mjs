@@ -1,13 +1,13 @@
 import assert from 'node:assert'
 import { mkdtempSync, mkdirSync, readdirSync, readFileSync, writeFileSync, existsSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, dirname } from 'node:path'
 
 const home = mkdtempSync(join(tmpdir(), 'virtual-person-test-'))
 process.env.DSH_HOME = home
 
 const mod = await import('./lib/index.js')
-const { readPersona, globalPath, sanitizeForHost, savePersona, createHandler, apply, pruneOldestMemory, summarizeTurn, appendMemory, hitsOf, isPinned, levelOf, bodyOf, findSimilar, similarity, snapshotMemory, pickForInject, regroupMemory } = mod
+const { readPersona, globalPath, sanitizeForHost, savePersona, createHandler, apply, pruneOldestMemory, summarizeTurn, appendMemory, hitsOf, isPinned, levelOf, bodyOf, findSimilar, similarity, pickForInject, regroupMemory } = mod
 
 // 1) 空目录：不注入空段落
 assert.equal(readPersona(), '')
@@ -57,10 +57,10 @@ assert.deepEqual(routes.map((r) => [r.kind, r.path]), [['prefix', '/api/virtual-
 // 5) 花括号降级是纯函数
 assert.equal(sanitizeForHost('a{{{b}}'), 'a{b}}')
 
-// 6) 保存：写回文件 + 生成 .bak 备份
+// 6) 保存：写回文件，且不偷偷留 .bak
 await savePersona('# 新版人格\n')
 assert.equal(readFileSync(globalPath(), 'utf8'), '# 新版人格\n')
-assert.equal(readFileSync(globalPath() + '.bak', 'utf8'), '# 你是谁\n\n<!-- 这是给我自己看的 -->\n\n说话要短，{{名字}}不用点破。\n')
+assert.ok(!existsSync(globalPath() + '.bak'), '保存不该再生成 .bak')
 
 // 6.5) 上限是 2 MB：多一个字节就要 413，且不动原文件
 await assert.rejects(
@@ -101,27 +101,13 @@ assert.equal(pruneOldestMemory(memoryDoc, 10 * 1024 * 1024).removed, 0, '没超�
   assert.ok(!out.content.includes('乙'), 'edge 里最旧的该先走')
   assert.ok(out.content.includes('重复提过的'), 'mid 不该先于 edge 被删')
 }
-// 6.7) 删记忆之前先快照：快照存的是剪枝前的原文，最多留 30 份
+// 6.7) 剪枝不留快照：整套备份机制已经拆了，别再偷偷写 snapshots/
 {
-  const home = mkdtempSync(join(tmpdir(), 'virtual-person-snapshot-'))
+  const home = mkdtempSync(join(tmpdir(), 'virtual-person-nosnap-'))
   const target = join(home, 'AGENT.md')
   writeFileSync(target, 'x', 'utf8')
-  const first = snapshotMemory('剪枝前的完整内容', target)
-  assert.ok(first !== null && existsSync(first), '快照该落盘')
-  assert.equal(readFileSync(first, 'utf8'), '剪枝前的完整内容', '快照内容该是剪枝前的原文')
-
-  for (let i = 0; i < 35; i += 1) snapshotMemory(`第 ${i} 次`, target)
-  const dir = join(home, 'snapshots')
-  const all = readdirSync(dir).filter((entry) => entry.endsWith('.snapshot.md'))
-  assert.equal(all.length, 30, '快照超过 30 份要按时间删最旧')
-  assert.ok(
-    !all.some((entry) => readFileSync(join(dir, entry), 'utf8') === '剪枝前的完整内容'),
-    '最早那份该被挤掉',
-  )
-  assert.ok(
-    all.some((entry) => readFileSync(join(dir, entry), 'utf8') === '第 34 次'),
-    '最新那份该留着',
-  )
+  assert.ok(!existsSync(join(home, 'snapshots')), '不该再建 snapshots 目录')
+  assert.equal(mod.snapshotMemory, undefined, 'snapshotMemory 该已经删了')
   rmSync(home, { recursive: true, force: true })
 }
 
@@ -288,11 +274,12 @@ const unrelated = appendMemory('他要去上课了，把话头留着', t2)
 assert.equal(hitsOf(unrelated), 0, '不像的那条没有命中标记')
 assert.ok(memoryRows().some((l) => l.includes('他要去上课了')), '不该并到别的行里去')
 
-// 日常追加不碰备份：.bak 只在真删掉两成那一刻才更新
+// 日常追加也不碰任何备份：整份文件旁边不该多出任何东西
 {
-  const before = readFileSync(globalPath() + '.bak', 'utf8')
+  const before = readdirSync(dirname(globalPath())).filter((entry) => entry.startsWith('AGENT.md'))
   appendMemory('备份测试：这一句只是日常追加', new Date('2026-10-28T19:30:00+08:00').getTime())
-  assert.equal(readFileSync(globalPath() + '.bak', 'utf8'), before, '日常追加不该覆盖备份')
+  const after = readdirSync(dirname(globalPath())).filter((entry) => entry.startsWith('AGENT.md'))
+  assert.deepEqual(after.sort(), before.sort(), '写入不该多出 .bak 之类的文件')
 }
 
 
@@ -469,4 +456,4 @@ const tail = slots.filter((m) => m.name === 'conversation.chat.turnTail')[0]
 assert.equal(tail.order, 11, '收尾语要排在费用行（order 10）之后')
 
 rmSync(home, { recursive: true, force: true })
-console.log('ok: 全部断言通过（全局注入 / 注释剥离 / 模板降级 / 忽略项目人格 / 接口注册 / 保存与备份 / 2 MB 上限 / 三档分层与按时间淘汰 / 删前快照 / 相似就并进原来那条 / 注入按字符预算挑且钉住优先 / 记忆按档位分节 / state 接口 / 心情判定 / 收尾语不重样 / 设置页与收尾语插槽）')
+console.log('ok: 全部断言通过（全局注入 / 注释剥离 / 模板降级 / 忽略项目人格 / 接口注册 / 保存不备份 / 2 MB 上限 / 三档分层与按时间淘汰 / 剪枝不留快照 / 相似就并进原来那条 / 注入按字符预算挑且钉住优先 / 记忆按档位分节 / state 接口 / 心情判定 / 收尾语不重样 / 设置页与收尾语插槽）')
