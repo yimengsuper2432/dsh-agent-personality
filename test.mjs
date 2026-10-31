@@ -228,8 +228,9 @@ const beforeClosing = memoryLines()
 const closingRes = await hit(memHandler, { url: '/api/agent-md/closing?session=mem-test&seq=1', method: 'GET', on() {}, destroy() {} })
 assert.equal(closingRes.status, 200)
 const afterFirst = memoryLines()
-await hit(memHandler, { url: '/api/agent-md/closing?session=mem-test&seq=1', method: 'GET', on() {}, destroy() {} })
+const repeatRes = await hit(memHandler, { url: '/api/agent-md/closing?session=mem-test&seq=1', method: 'GET', on() {}, destroy() {} })
 assert.equal(memoryLines(), afterFirst, '同一轮重复记了')
+assert.equal(repeatRes.body.text, closingRes.body.text, '同一个 seq 的灰字每请求一次就换一句')
 assert.equal(afterFirst, beforeClosing + 1, '记忆条数不对')
 
 // 她写来〔记〕：把这一轮先垫的那行换成真正的总结，不该多出一条
