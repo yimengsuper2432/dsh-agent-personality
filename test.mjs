@@ -7,7 +7,7 @@ const home = mkdtempSync(join(tmpdir(), 'virtual-person-test-'))
 process.env.DSH_HOME = home
 
 const mod = await import('./lib/index.js')
-const { readPersona, globalPath, sanitizeForHost, savePersona, createHandler, apply, pruneOldestMemory, summarizeTurn, appendMemory, weightOf, hitsOf, isPinned, levelOf, bodyOf, findSimilar, similarity, snapshotMemory, appendProfile, pickForInject, inheritWeight } = mod
+const { readPersona, globalPath, sanitizeForHost, savePersona, createHandler, apply, pruneOldestMemory, summarizeTurn, appendMemory, hitsOf, isPinned, levelOf, bodyOf, findSimilar, similarity, snapshotMemory, pickForInject } = mod
 
 // 1) 空目录：不注入空段落
 assert.equal(readPersona(), '')
@@ -140,9 +140,9 @@ assert.equal(isPinned('- 2026-10-28 10:00："普通"；'), false)
 assert.equal(bodyOf('- 2026-10-28 10:00："内容"^2；'), '内容')
 assert.equal(bodyOf('- 2026-10-28 10:00："内容"*；'), '内容')
 assert.equal(bodyOf('- 2026-10-28 10:00："内容"Weight=5；'), '内容')
-// 老格式还能读（只读不写）
-assert.equal(weightOf('- 2026-10-28 10:00 没写权重'), 1)
-assert.equal(weightOf('- 2026-10-28 10:00：`"写了`"Weight=4；'), 4)
+// 老格式还能读（只读不写）：Weight=N 当成被提过 N-1 次
+assert.equal(hitsOf('- 2026-10-28 10:00 没写权重'), 0)
+assert.equal(hitsOf('- 2026-10-28 10:00：`"写了`"Weight=4；'), 3)
 
 // 6.7) 记忆自动落盘：兜底只写用户真打的那句（跳过宿主塞进去的大块上下文和工具输出），
 //      她自己写来的〔记〕再把那一行换成真正的总结
@@ -215,24 +215,27 @@ assert.equal(levelOf(fresh), 'edge', '新写的一条是 edge')
 assert.equal(memoryRows().length, 2)
 
 
-// 注入：钉住的先占名额，其余按时间从新到旧；最多 200 条，没挑中的还在文件里
+// 注入：钉住的先占名额，其余按时间从新到旧补，补到字符预算用完；没挑中的还在文件里
 {
   const rows = []
-  for (let i = 0; i < 205; i += 1) {
+  for (let i = 0; i < 40; i += 1) {
     const hh = String(Math.floor(i / 60)).padStart(2, '0')
     const mm = String(i % 60).padStart(2, '0')
     rows.push(`- 2026-01-01 ${hh}:${mm}："第${i}条"；`)
   }
   rows[3] = '- 2025-01-01 02:00："钉住的老记忆"*；'
-  const picked = pickForInject(['## 记忆', '', ...rows].join('\n'))
+  const all = ['## 记忆', '', ...rows].join('\n')
+  // 一条三十来个字符，给 300 字预算只放得下十来条
+  const picked = pickForInject(all, 300)
   const kept = picked.split('\n').filter((l) => l.startsWith('- 20'))
-  assert.equal(kept.length, 200, '只摆 200 条')
+  assert.ok(kept.length > 0 && kept.length < rows.length, '按字符预算只挑了一部分')
   assert.ok(picked.includes('钉住的老记忆'), '钉住的一定留下')
   assert.ok(!picked.includes('"第0条"'), '最旧的被挤掉')
-  assert.ok(picked.includes('"第204条"'), '最新的留下')
+  assert.ok(picked.includes('"第39条"'), '最新的留下')
   assert.ok(picked.includes('## 记忆'), '小节标题不能被删')
   const order = kept.map((l) => rows.indexOf(l))
   assert.deepEqual(order, [...order].sort((a, b) => a - b), '挑完仍按原来的顺序摆')
+  assert.ok(pickForInject(all, 1e9).split('\n').filter((l) => l.startsWith('- 20')).length === rows.length, '预算够就一条不丢')
 }
 
 // 相似度只用来判「是不是同一件事」：不累加、也不封顶
@@ -242,7 +245,6 @@ assert.equal(memoryRows().length, 2)
   assert.equal(hit?.index, 2, '该认出是同一件事')
   assert.ok(hit.score > 0.9, '同一句相似度该很高')
   assert.equal(findSimilar('他今天带了把蓝格子伞', base), null, '不像的不合并')
-  assert.equal(inheritWeight('遥那张卡面翻出来看了半天，浅蓝头发白蝴蝶结', base), 8, '再提一次就是 ^8')
 }
 
 // 不像的照常另起一行
@@ -430,56 +432,5 @@ assert.equal(typeof settings.label, 'function')
 const tail = slots.filter((m) => m.name === 'conversation.chat.turnTail')[0]
 assert.equal(tail.order, 11, '收尾语要排在费用行（order 10）之后')
 
-// 档案：说到某个角色的新信息，并进那个人的那段总结
-writeFileSync(
-  globalPath(),
-  ['# 人设', '', '- 桃井爱莉：', '    原偶像。嘴上凶。', '- 桐谷遥：', '    冷静自持。', '', '## 记忆', ''].join('\n'),
-)
-const readRaw = () => readFileSync(globalPath(), 'utf8')
-
-assert.equal(appendProfile('桃井爱莉：喜欢草莓蛋糕'), '桃井爱莉：喜欢草莓蛋糕')
-let raw = readRaw()
-assert.ok(raw.includes('    原偶像。嘴上凶。喜欢草莓蛋糕。'), '没并进那段总结')
-
-// 同类再添一项，还是那一句
-assert.equal(appendProfile('桃井爱莉：喜欢布丁'), '桃井爱莉：喜欢布丁')
-raw = readRaw()
-assert.ok(raw.includes('喜欢草莓蛋糕、布丁'), '喜欢的没并到同一句')
-assert.equal(raw.split('\n').filter((line) => line.includes('喜欢')).length, 1, '喜欢占了不止一行')
-
-// 别的侧面各自一句，谁也不抵销谁
-assert.equal(appendProfile('桃井爱莉：讨厌被人说可爱'), '桃井爱莉：讨厌被人说可爱')
-assert.equal(appendProfile('桃井爱莉：对猫过敏'), '桃井爱莉：对猫过敏')
-raw = readRaw()
-assert.ok(raw.includes('讨厌被人说可爱。'), '讨厌的没单独一句')
-assert.ok(raw.includes('对猫过敏。'), '过敏该单独一句')
-assert.ok(raw.includes('喜欢草莓蛋糕、布丁'), '喜欢那句被动了')
-
-// 重复的不加第二次
-assert.equal(appendProfile('桃井爱莉：喜欢布丁'), null, '同一项不该加两次')
-
-// 老格式也认，提到时顺手升级成新格式
-writeFileSync(
-  globalPath(),
-  ['# 人设', '', '- **桐谷遥**：原人气偶像。表情不太外露。', '', '## 记忆', ''].join('\n'),
-)
-assert.equal(appendProfile('桐谷遥：喜欢安静的地方'), '桐谷遥：喜欢安静的地方')
-raw = readRaw()
-assert.ok(raw.includes('- 桐谷遥：'), '老格式没升级')
-assert.ok(!raw.includes('**桐谷遥**'), '老格式的星号还在')
-assert.ok(
-  raw.includes('    原人气偶像。表情不太外露。喜欢安静的地方。'),
-  '升级后内容不对',
-)
-
-// 档案里还没有的人：单开一段
-assert.equal(appendProfile('朝比奈真冬：喜欢安静'), '朝比奈真冬：喜欢安静')
-raw = readRaw()
-assert.ok(raw.includes('## 补记的人'), '缺补记段落')
-assert.ok(raw.includes('- 朝比奈真冬：'), '补记名字行不对')
-assert.ok(raw.includes('    喜欢安静。'), '补记内容不对')
-assert.equal(appendProfile('格式不对'), null, '没有冒号的不该收')
-
-
 rmSync(home, { recursive: true, force: true })
-console.log('ok: 全部断言通过（全局注入 / 注释剥离 / 模板降级 / 忽略项目人格 / 接口注册 / 保存与备份 / 2 MB 上限 / 三档分层与按时间淘汰 / 删前快照 / 相似就并进原来那条 / 注入先钉住再取新的 / state 接口 / 心情判定 / 收尾语不重样 / 设置页与收尾语插槽 / 角色档案追加）')
+console.log('ok: 全部断言通过（全局注入 / 注释剥离 / 模板降级 / 忽略项目人格 / 接口注册 / 保存与备份 / 2 MB 上限 / 三档分层与按时间淘汰 / 删前快照 / 相似就并进原来那条 / 注入按字符预算挑且钉住优先 / state 接口 / 心情判定 / 收尾语不重样 / 设置页与收尾语插槽）')

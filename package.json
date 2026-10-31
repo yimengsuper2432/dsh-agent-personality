@@ -1,6 +1,6 @@
 {
   "name": "dsh-virtual-person",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "private": true,
   "type": "module",
   "description": "把 AGENT.md 注入系统提示，并在设置里提供一个只编辑它的页面。",
